@@ -2,13 +2,68 @@
 
 version: 2
 
-includes:
-  - from_url:
-      url: charmbracelet/meta/main/goreleaser-glow.yaml
+metadata:
+  mod_timestamp: "{{ .CommitTimestamp }}"
 
-variables:
-  description: "Render markdown on the CLI, with pizzazz!"
-  github_url: "https://github.com/charmbracelet/glow"
-  maintainer: "Christian Muehlhaeuser <muesli@charm.sh>"
-  brew_commit_author_name: "Christian Muehlhaeuser"
-  brew_commit_author_email: "muesli@charm.sh"
+before:
+  hooks:
+    - go mod tidy
+    - rm -rf completions
+    - mkdir completions
+    - rm -rf manpages
+    - mkdir manpages
+    - sh -c 'go run . completion bash >./completions/glow.bash'
+    - sh -c 'go run . completion zsh >./completions/glow.zsh'
+    - sh -c 'go run . completion fish >./completions/glow.fish'
+    - sh -c 'go run . man | gzip -c >./manpages/glow.1.gz'
+
+builds:
+  - binary: glow
+    env:
+      - CGO_ENABLED=0
+    ldflags:
+      - -s -w
+      - -X main.Version={{ .Version }}
+      - -X main.CommitSHA={{ .Commit }}
+      - -X main.CommitDate={{ .CommitDate }}
+    goos:
+      - linux
+      - darwin
+      - windows
+      - freebsd
+      - openbsd
+      - netbsd
+    goarch:
+      - amd64
+      - arm64
+    ignore:
+      - goos: windows
+        goarch: arm64
+
+archives:
+  - format_overrides:
+      - goos: windows
+        formats: zip
+    name_template: >-
+      {{ .ProjectName }}_
+      {{- .Version }}_
+      {{- title .Os }}_
+      {{- if eq .Arch "amd64" }}x86_64
+      {{- else }}{{ .Arch }}{{ end }}
+    wrap_in_directory: true
+    files:
+      - README*
+      - LICENSE*
+      - manpages/*
+      - completions/*
+
+checksum:
+  name_template: checksums.txt
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+      - "^chore:"
