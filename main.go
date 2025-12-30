@@ -310,7 +310,7 @@ func executeCLI(cmd *cobra.Command, src *source, w io.Writer) error {
 	}
 
 	// Preprocess mermaid diagrams before rendering
-	content = mermaid.ProcessMarkdown(content)
+	content = mermaid.ProcessMarkdown(content, int(width)) //nolint:gosec
 
 	out, err := r.Render(content)
 	if err != nil {

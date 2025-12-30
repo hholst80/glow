@@ -451,7 +451,7 @@ func glamourRender(m pagerModel, markdown string) (string, error) {
 	}
 
 	// Preprocess mermaid diagrams before rendering
-	markdown = mermaid.ProcessMarkdown(markdown)
+	markdown = mermaid.ProcessMarkdown(markdown, width)
 
 	out, err := r.Render(markdown)
 	if err != nil {
