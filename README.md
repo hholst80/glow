@@ -33,7 +33,7 @@ Download a pre-built static binary from the [GitHub Releases][releases] page.
 **Available platforms:**
 - Linux (amd64, arm64)
 - macOS (amd64, arm64)
-- Windows (amd64)
+- Windows (amd64, arm64)
 - FreeBSD (amd64, arm64)
 - OpenBSD (amd64, arm64)
 - NetBSD (amd64, arm64)

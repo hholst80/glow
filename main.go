@@ -31,6 +31,8 @@ var (
 	Version = ""
 	// CommitSHA as provided by goreleaser.
 	CommitSHA = ""
+	// CommitDate as provided by goreleaser.
+	CommitDate = ""
 
 	readmeNames      = []string{"README.md", "README", "Readme.md", "Readme", "readme.md", "readme"}
 	configFile       string
