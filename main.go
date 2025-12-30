@@ -31,6 +31,8 @@ var (
 	Version = ""
 	// CommitSHA as provided by goreleaser.
 	CommitSHA = ""
+	// CommitDate as provided by goreleaser.
+	CommitDate = ""
 
 	readmeNames      = []string{"README.md", "README", "Readme.md", "Readme", "readme.md", "readme"}
 	configFile       string
@@ -383,14 +385,27 @@ func main() {
 
 func init() {
 	tryLoadConfigFromDefaultPlaces()
-	if len(CommitSHA) >= 7 {
-		vt := rootCmd.VersionTemplate()
-		rootCmd.SetVersionTemplate(vt[:len(vt)-1] + " (" + CommitSHA[0:7] + ")\n")
-	}
+
+	// Build version string
 	if Version == "" {
-		Version = "unknown (built from source)"
+		Version = "rolling"
 	}
-	rootCmd.Version = Version
+	versionInfo := Version
+	if len(CommitSHA) >= 7 || CommitDate != "" {
+		var details []string
+		if len(CommitSHA) >= 7 {
+			details = append(details, CommitSHA[0:7])
+		}
+		if CommitDate != "" {
+			details = append(details, CommitDate)
+		}
+		if len(details) > 0 {
+			versionInfo += " (" + strings.Join(details, "; ") + ")"
+		}
+	} else {
+		versionInfo += " (built from source)"
+	}
+	rootCmd.Version = versionInfo
 	rootCmd.InitDefaultCompletionCmd()
 
 	// "Glow Classic" cli arguments

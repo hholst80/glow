@@ -2,12 +2,13 @@
 
 Render markdown on the CLI, with _pizzazz_!
 
+> **Note:** This is a fork of [charmbracelet/glow](https://github.com/charmbracelet/glow).
+> See [Installation](#installation) for how to get binaries.
+
 <p align="center">
     <img src="https://stuff.charm.sh/glow/glow-banner-github.gif" alt="Glow Logo">
-    <a href="https://github.com/charmbracelet/glow/releases"><img src="https://img.shields.io/github/release/charmbracelet/glow.svg" alt="Latest Release"></a>
-    <a href="https://pkg.go.dev/github.com/charmbracelet/glow?tab=doc"><img src="https://godoc.org/github.com/golang/gddo?status.svg" alt="GoDoc"></a>
-    <a href="https://github.com/charmbracelet/glow/actions"><img src="https://github.com/charmbracelet/glow/workflows/build/badge.svg" alt="Build Status"></a>
-    <a href="https://goreportcard.com/report/github.com/charmbracelet/glow"><img src="https://goreportcard.com/badge/charmbracelet/glow" alt="Go ReportCard"></a>
+    <a href="https://github.com/hholst80/glow/releases"><img src="https://img.shields.io/github/release/hholst80/glow.svg" alt="Latest Release"></a>
+    <a href="https://github.com/hholst80/glow/actions"><img src="https://github.com/hholst80/glow/workflows/build/badge.svg" alt="Build Status"></a>
 </p>
 
 <p align="center">
@@ -25,100 +26,33 @@ Git repository.
 
 ## Installation
 
-### Package Manager
+### Download Binary
+
+Download a pre-built static binary from the [GitHub Releases][releases] page.
+
+**Available platforms:**
+- Linux (amd64, arm64)
+- macOS (amd64, arm64)
+- Windows (amd64, arm64)
+- FreeBSD (amd64, arm64)
+- OpenBSD (amd64, arm64)
+- NetBSD (amd64, arm64)
 
 ```bash
-# macOS or Linux
-brew install glow
+# Example: Download and install on Linux
+curl -L https://github.com/hholst80/glow/releases/latest/download/glow_Linux_x86_64.tar.gz | tar xz
+sudo mv glow /usr/local/bin/
 ```
 
-```bash
-# macOS (with MacPorts)
-sudo port install glow
-```
+### Build from Source (requires Go 1.21+)
 
 ```bash
-# Arch Linux (btw)
-pacman -S glow
-```
-
-```bash
-# Void Linux
-xbps-install -S glow
-```
-
-```bash
-# Nix shell
-nix-shell -p glow --command glow
-```
-
-```bash
-# FreeBSD
-pkg install glow
-```
-
-```bash
-# Solus
-eopkg install glow
-```
-
-```bash
-# Windows (with Chocolatey, Scoop, or Winget)
-choco install glow
-scoop install glow
-winget install charmbracelet.glow
-```
-
-```bash
-# Android (with termux)
-pkg install glow
-```
-
-```bash
-# Ubuntu (Snapcraft)
-sudo snap install glow
-```
-
-```bash
-# Debian/Ubuntu
-sudo mkdir -p /etc/apt/keyrings
-curl -fsSL https://repo.charm.sh/apt/gpg.key | sudo gpg --dearmor -o /etc/apt/keyrings/charm.gpg
-echo "deb [signed-by=/etc/apt/keyrings/charm.gpg] https://repo.charm.sh/apt/ * *" | sudo tee /etc/apt/sources.list.d/charm.list
-sudo apt update && sudo apt install glow
-```
-
-```bash
-# Fedora/RHEL
-echo '[charm]
-name=Charm
-baseurl=https://repo.charm.sh/yum/
-enabled=1
-gpgcheck=1
-gpgkey=https://repo.charm.sh/yum/gpg.key' | sudo tee /etc/yum.repos.d/charm.repo
-sudo yum install glow
-```
-
-Or download a binary from the [releases][releases] page. MacOS, Linux, Windows,
-FreeBSD and OpenBSD binaries are available, as well as Debian, RPM, and Alpine
-packages. ARM builds are also available for macOS, Linux, FreeBSD and OpenBSD.
-
-### Go
-
-Or just install it with `go`:
-
-```bash
-go install github.com/charmbracelet/glow/v2@latest
-```
-
-### Build (requires Go 1.21+)
-
-```bash
-git clone https://github.com/charmbracelet/glow.git
+git clone https://github.com/hholst80/glow.git
 cd glow
 go build
 ```
 
-[releases]: https://github.com/charmbracelet/glow/releases
+[releases]: https://github.com/hholst80/glow/releases
 
 ## The TUI
 
@@ -217,26 +151,13 @@ preserveNewLines: false
 
 ## Contributing
 
-See [contributing][contribute].
-
-[contribute]: https://github.com/charmbracelet/glow/contribute
-
-## Feedback
-
-We’d love to hear your thoughts on this project. Feel free to drop us a note!
-
-- [Twitter](https://twitter.com/charmcli)
-- [The Fediverse](https://mastodon.social/@charmcli)
-- [Discord](https://charm.sh/chat)
+See [AGENTS.md](AGENTS.md) for development guidelines.
 
 ## License
 
-[MIT](https://github.com/charmbracelet/glow/raw/master/LICENSE)
+[MIT](https://github.com/hholst80/glow/raw/master/LICENSE)
 
 ---
 
-Part of [Charm](https://charm.sh).
-
-<a href="https://charm.sh/"><img alt="The Charm logo" src="https://stuff.charm.sh/charm-badge.jpg" width="400"></a>
-
-Charm热爱开源 • Charm loves open source
+This is a fork of [charmbracelet/glow](https://github.com/charmbracelet/glow).
+Original project by [Charm](https://charm.sh).
