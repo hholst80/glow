@@ -385,7 +385,10 @@ func findLocalFiles(m commonModel) tea.Cmd {
 		if m.cfg.ShowAllFiles {
 			ch, err = gitcha.FindAllFilesExcept(cwd, markdownExtensions, nil)
 		} else {
-			ch, err = gitcha.FindFilesExcept(cwd, markdownExtensions, ignorePatterns(m))
+			// Combine default ignore patterns with .glowignore patterns
+			patterns := ignorePatterns(m)
+			patterns = append(patterns, readGlowignore(cwd)...)
+			ch, err = gitcha.FindFilesExcept(cwd, markdownExtensions, patterns)
 		}
 
 		if err != nil {
