@@ -358,3 +358,68 @@ GitHub Actions runs on every PR:
 4. **Security** - govulncheck, semgrep, ruleguard
 
 All checks should pass before merging.
+
+## Release Process
+
+This fork uses **date-based versioning** instead of semantic versioning.
+
+### Version Format
+
+```
+YYYY.MM.DD      - Primary release for that date
+YYYY.MM.DD.N    - Additional releases on the same date (N = 1, 2, 3, ...)
+```
+
+Examples:
+- `2025.12.30` - First release on December 30, 2025
+- `2025.12.30.1` - Second release on the same day
+
+### Creating a Release
+
+1. **Ensure master is ready**
+   ```bash
+   git checkout master
+   git pull origin master
+   task lint && task test && go build
+   ```
+
+2. **Create a date-based tag**
+   ```bash
+   # Format: YYYY.MM.DD
+   git tag 2025.12.30
+   git push origin 2025.12.30
+   ```
+
+3. **CI/CD handles the rest**
+   - Goreleaser builds static binaries for all platforms
+   - Creates GitHub Release with artifacts
+   - Generates checksums
+
+### What Gets Built
+
+The release includes static binaries for:
+- **Operating Systems:** Linux, macOS, Windows, FreeBSD, OpenBSD, NetBSD
+- **Architectures:** amd64 (x86_64), arm64
+
+Each release includes:
+- Binary archives (`.tar.gz`, `.zip` for Windows)
+- Shell completions (bash, zsh, fish)
+- Man pages
+- Checksums file
+
+### Distribution
+
+**GitHub Releases only.** No package managers (Homebrew, apt, etc.).
+
+Users download binaries directly from:
+```
+https://github.com/hholst80/glow/releases
+```
+
+### Hotfix Releases
+
+For same-day fixes:
+```bash
+git tag 2025.12.30.1
+git push origin 2025.12.30.1
+```
