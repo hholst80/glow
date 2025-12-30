@@ -21,3 +21,41 @@ tasks:
         platforms: [darwin]
       - cmd: tail -f ~/.cache/glow/glow.log
         platforms: [linux, windows]
+
+  labels:sync:
+    desc: Create or update all repository labels
+    cmds:
+      - gh label create "type:bug" --color "d73a4a" --description "Something isn't working correctly" --force
+      - gh label create "type:feature" --color "a2eeef" --description "New functionality request" --force
+      - gh label create "type:docs" --color "0075ca" --description "Documentation improvements" --force
+      - gh label create "type:chore" --color "fef2c0" --description "Maintenance, dependencies, CI" --force
+      - gh label create "status:triage" --color "fbca04" --description "Needs review and categorization" --force
+      - gh label create "status:accepted" --color "0e8a16" --description "Issue is valid and will be addressed" --force
+      - gh label create "status:blocked" --color "b60205" --description "Waiting on external dependency or decision" --force
+      - gh label create "status:wontfix" --color "ffffff" --description "Will not be addressed" --force
+      - gh label create "ready-for-pr" --color "7057ff" --description "Ready for implementation - PRs welcome" --force
+      - gh label create "priority:high" --color "ff6600" --description "Should be addressed soon" --force
+      - gh label create "priority:low" --color "c5def5" --description "Nice to have, no urgency" --force
+      - echo "Labels synced successfully"
+
+  labels:audit:
+    desc: Output all issues with labels for AI agent review
+    cmds:
+      - |
+        echo "=== LABEL AUDIT REPORT ==="
+        echo ""
+        echo "Current repository labels:"
+        gh label list --json name,description --jq '.[] | "  - \(.name): \(.description)"'
+        echo ""
+        echo "=== ALL OPEN ISSUES ==="
+        gh issue list --state open --json number,title,labels,body --jq '.[] | "Issue #\(.number): \(.title)\nLabels: \(.labels | map(.name) | join(\", \") | if . == \"\" then \"(none)\" else . end)\nBody: \(.body | split(\"\n\")[0:3] | join(\" \") | .[0:200])\n---"'
+        echo ""
+        echo "=== ALL CLOSED ISSUES (last 50) ==="
+        gh issue list --state closed --limit 50 --json number,title,labels --jq '.[] | "Issue #\(.number): \(.title) | Labels: \(.labels | map(.name) | join(\", \") | if . == \"\" then \"(none)\" else . end)"'
+        echo ""
+        echo "Review the above and use 'gh issue edit <number> --add-label <label> --remove-label <label>' to fix labels."
+
+  labels:apply:
+    desc: Apply a label to an issue (usage - task labels:apply -- 123 type:bug)
+    cmds:
+      - gh issue edit {{index .CLI_ARGS 0}} --add-label {{index .CLI_ARGS 1}}
