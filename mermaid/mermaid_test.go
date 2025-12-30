@@ -227,3 +227,166 @@ func min(a, b int) int {
 	}
 	return b
 }
+
+// Integration tests for supported diagram types.
+// These tests use the real mermaid-ascii renderer to verify actual output.
+
+func TestSupportedDiagramTypes(t *testing.T) {
+	r := NewRenderer()
+
+	t.Run("Flowchart_LeftToRight", func(t *testing.T) {
+		source := `graph LR
+    A[Start] --> B{Decision}
+    B -->|Yes| C[OK]
+    B -->|No| D[Cancel]`
+
+		result, err := r.Render(source)
+		if err != nil {
+			t.Fatalf("Flowchart LR rendering failed: %v", err)
+		}
+
+		// Verify key elements are present in the output
+		expectations := []string{
+			"Start",    // Node A label
+			"Decision", // Node B label
+			"OK",       // Node C label
+			"Cancel",   // Node D label
+		}
+
+		for _, exp := range expectations {
+			if !strings.Contains(result, exp) {
+				t.Errorf("Flowchart LR output missing expected element %q\nGot:\n%s", exp, result)
+			}
+		}
+
+		// Verify it contains box-drawing characters (Unicode rendering)
+		if !strings.ContainsAny(result, "┌┐└┘├┤┬┴─│►") {
+			t.Errorf("Flowchart LR output should contain box-drawing characters\nGot:\n%s", result)
+		}
+	})
+
+	t.Run("Flowchart_TopDown", func(t *testing.T) {
+		source := `graph TD
+    A[Top] --> B[Middle]
+    B --> C[Bottom]`
+
+		result, err := r.Render(source)
+		if err != nil {
+			t.Fatalf("Flowchart TD rendering failed: %v", err)
+		}
+
+		expectations := []string{
+			"Top",
+			"Middle",
+			"Bottom",
+		}
+
+		for _, exp := range expectations {
+			if !strings.Contains(result, exp) {
+				t.Errorf("Flowchart TD output missing expected element %q\nGot:\n%s", exp, result)
+			}
+		}
+	})
+
+	t.Run("SequenceDiagram", func(t *testing.T) {
+		source := `sequenceDiagram
+    Alice->>Bob: Hello Bob
+    Bob-->>Alice: Hi Alice
+    Alice->>Bob: How are you?
+    Bob-->>Alice: I'm good!`
+
+		result, err := r.Render(source)
+		if err != nil {
+			t.Fatalf("Sequence diagram rendering failed: %v", err)
+		}
+
+		// Verify participants are present
+		participants := []string{
+			"Alice",
+			"Bob",
+		}
+
+		for _, p := range participants {
+			if !strings.Contains(result, p) {
+				t.Errorf("Sequence diagram output missing participant %q\nGot:\n%s", p, result)
+			}
+		}
+
+		// Verify messages are present
+		messages := []string{
+			"Hello Bob",
+			"Hi Alice",
+		}
+
+		for _, m := range messages {
+			if !strings.Contains(result, m) {
+				t.Errorf("Sequence diagram output missing message %q\nGot:\n%s", m, result)
+			}
+		}
+
+		// Verify arrow indicators are present
+		if !strings.ContainsAny(result, "►◄→←") && !strings.Contains(result, "->") {
+			t.Errorf("Sequence diagram should contain arrow indicators\nGot:\n%s", result)
+		}
+	})
+}
+
+func TestFlowchartWithLabels(t *testing.T) {
+	r := NewRenderer()
+
+	source := `graph LR
+    A --> |label1| B
+    B --> |label2| C`
+
+	result, err := r.Render(source)
+	if err != nil {
+		t.Fatalf("Flowchart with labels rendering failed: %v", err)
+	}
+
+	// Edge labels should be present
+	if !strings.Contains(result, "label1") {
+		t.Errorf("Flowchart output missing edge label 'label1'\nGot:\n%s", result)
+	}
+	if !strings.Contains(result, "label2") {
+		t.Errorf("Flowchart output missing edge label 'label2'\nGot:\n%s", result)
+	}
+}
+
+func TestProcessMarkdownIntegration(t *testing.T) {
+	markdown := `# My Document
+
+Here's a flowchart:
+
+` + "```mermaid\ngraph LR\n    A[Hello] --> B[World]\n```" + `
+
+And here's a sequence diagram:
+
+` + "```mermaid\nsequenceDiagram\n    Client->>Server: Request\n    Server-->>Client: Response\n```" + `
+
+The end.`
+
+	result := ProcessMarkdown(markdown)
+
+	// The mermaid blocks should be replaced with rendered output
+	if strings.Contains(result, "```mermaid") {
+		t.Error("ProcessMarkdown should replace mermaid code blocks")
+	}
+
+	// Key content should be present
+	expectations := []string{
+		"# My Document",
+		"Hello",
+		"World",
+		"Client",
+		"Server",
+		"Request",
+		"Response",
+		"The end.",
+	}
+
+	for _, exp := range expectations {
+		if !strings.Contains(result, exp) {
+			t.Errorf("ProcessMarkdown output missing expected content %q", exp)
+		}
+	}
+}

@@ -1,4 +1,11 @@
 // Package mermaid provides rendering of Mermaid diagrams to ASCII art.
+//
+// Supported diagram types:
+//   - Flowcharts: graph LR (left-to-right) and graph TD (top-down)
+//   - Sequence diagrams: sequenceDiagram with participants and messages
+//
+// The package uses the mermaid-ascii library for rendering, which produces
+// Unicode box-drawing characters for clean terminal output.
 package mermaid
 
 import (
