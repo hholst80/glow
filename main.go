@@ -16,6 +16,7 @@ import (
 	"github.com/caarlos0/env/v11"
 	"github.com/charmbracelet/glamour"
 	"github.com/charmbracelet/glamour/styles"
+	"github.com/charmbracelet/glow/v2/mermaid"
 	"github.com/charmbracelet/glow/v2/ui"
 	"github.com/charmbracelet/glow/v2/utils"
 	"github.com/charmbracelet/lipgloss"
@@ -307,6 +308,9 @@ func executeCLI(cmd *cobra.Command, src *source, w io.Writer) error {
 	if isCode {
 		content = utils.WrapCodeBlock(string(b), ext)
 	}
+
+	// Preprocess mermaid diagrams before rendering
+	content = mermaid.ProcessMarkdown(content)
 
 	out, err := r.Render(content)
 	if err != nil {
