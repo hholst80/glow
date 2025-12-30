@@ -132,4 +132,4 @@ jobs:
           mv rules /tmp/rules
           go install github.com/quasilyte/go-ruleguard/cmd/ruleguard@latest
           go get -u github.com/quasilyte/go-ruleguard/dsl
-          ruleguard -c 0 -rules /tmp/rules/ruleguard.rules.go $(find . -name '*.go')
+          ruleguard -c 0 -rules /tmp/rules/ruleguard.rules.go ./...
