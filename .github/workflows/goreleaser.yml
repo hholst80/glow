@@ -30,9 +30,6 @@ jobs:
           go-version: stable
           cache: true
 
-      - name: Setup QEMU
-        uses: docker/setup-qemu-action@v3
-
       - name: Run GoReleaser
         uses: goreleaser/goreleaser-action@v6
         with:
