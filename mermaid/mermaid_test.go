@@ -15,7 +15,7 @@ type MockRenderer struct {
 }
 
 // Render implements Renderer interface.
-func (m *MockRenderer) Render(source string) (string, error) {
+func (m *MockRenderer) Render(source string, maxWidth int) (string, error) {
 	m.Calls = append(m.Calls, source)
 	if m.RenderFunc != nil {
 		return m.RenderFunc(source)
@@ -123,7 +123,7 @@ More text.`,
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			mock := &MockRenderer{RenderFunc: tt.renderFunc}
-			p := NewPreprocessor(mock)
+			p := NewPreprocessor(mock, 0) // 0 = no width limit
 
 			result := p.Process(tt.markdown)
 
@@ -171,7 +171,7 @@ func TestDefaultRenderer_Render(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result, err := r.Render(tt.source)
+			result, err := r.Render(tt.source, 0) // 0 = no width limit
 			if (err != nil) != tt.wantErr {
 				t.Errorf("Render() error = %v, wantErr %v", err, tt.wantErr)
 				return
@@ -240,7 +240,7 @@ func TestSupportedDiagramTypes(t *testing.T) {
     B -->|Yes| C[OK]
     B -->|No| D[Cancel]`
 
-		result, err := r.Render(source)
+		result, err := r.Render(source, 0)
 		if err != nil {
 			t.Fatalf("Flowchart LR rendering failed: %v", err)
 		}
@@ -270,7 +270,7 @@ func TestSupportedDiagramTypes(t *testing.T) {
     A[Top] --> B[Middle]
     B --> C[Bottom]`
 
-		result, err := r.Render(source)
+		result, err := r.Render(source, 0)
 		if err != nil {
 			t.Fatalf("Flowchart TD rendering failed: %v", err)
 		}
@@ -295,7 +295,7 @@ func TestSupportedDiagramTypes(t *testing.T) {
     Alice->>Bob: How are you?
     Bob-->>Alice: I'm good!`
 
-		result, err := r.Render(source)
+		result, err := r.Render(source, 0)
 		if err != nil {
 			t.Fatalf("Sequence diagram rendering failed: %v", err)
 		}
@@ -338,7 +338,7 @@ func TestFlowchartWithLabels(t *testing.T) {
     A --> |label1| B
     B --> |label2| C`
 
-	result, err := r.Render(source)
+	result, err := r.Render(source, 0)
 	if err != nil {
 		t.Fatalf("Flowchart with labels rendering failed: %v", err)
 	}
@@ -365,7 +365,7 @@ And here's a sequence diagram:
 
 The end.`
 
-	result := ProcessMarkdown(markdown)
+	result := ProcessMarkdown(markdown, 0) // 0 = no width limit
 
 	// The mermaid blocks should be replaced with rendered output
 	if strings.Contains(result, "```mermaid") {
@@ -388,5 +388,191 @@ The end.`
 		if !strings.Contains(result, exp) {
 			t.Errorf("ProcessMarkdown output missing expected content %q", exp)
 		}
+	}
+}
+
+func TestIsTooComplex(t *testing.T) {
+	tests := []struct {
+		name     string
+		source   string
+		expected bool
+	}{
+		{
+			name:     "simple flowchart",
+			source:   "graph LR\n    A --> B --> C",
+			expected: false,
+		},
+		{
+			name:     "sequence diagram (not a flowchart)",
+			source:   "sequenceDiagram\n    A->>B: Hello",
+			expected: false,
+		},
+		{
+			name:     "single subgraph with few edges",
+			source:   "flowchart LR\n    subgraph SG[Group]\n        A --> B\n    end\n    C --> A",
+			expected: false,
+		},
+		{
+			name: "multiple subgraphs with many edges",
+			source: `flowchart LR
+    subgraph SENSE[Sense]
+        cam[Camera]
+        unity[Unity]
+    end
+    subgraph PERCEIVE[Perceive]
+        perc[Perception]
+        backend[Backend]
+    end
+    cam --> perc
+    cam --> backend
+    unity --> perc
+    unity --> backend
+    perc --> backend
+    backend --> cam
+    perc --> unity`,
+			expected: true,
+		},
+		{
+			name: "too many edges overall",
+			source: `graph LR
+    A --> B --> C --> D --> E --> F --> G --> H
+    H --> I --> J --> K --> L --> M --> N --> O --> P --> Q`,
+			expected: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := isTooComplex(tt.source)
+			if result != tt.expected {
+				t.Errorf("isTooComplex() = %v, want %v", result, tt.expected)
+			}
+		})
+	}
+}
+
+func TestComplexDiagramFromEXAMPLE(t *testing.T) {
+	// This is the actual complex diagram from EXAMPLE.md that should be detected as too complex
+	source := `flowchart LR
+    subgraph SENSE[Sense & Simulate]
+        cam["ros-basler<br/>Basler camera node"]
+        unity["ros-tcp-endpoint<br/>Unity / DTS"]
+        tests["test-scripts<br/>Scenario publishers"]
+    end
+    subgraph PERCEIVE[Perceive & Decide]
+        perc["perception<br/>YOLO + tracker"]
+        backend["backend<br/>FastAPI + ROS"]
+        commander["commander<br/>Control arbiter"]
+    end
+    subgraph CONTROL[Control & Actuate]
+        gimbal["gimbal-control<br/>Radians → servo"]
+        servo["servo-c (ref) / servo<br/>EtherCAT bridge"]
+        mech[(Pan/Tilt + weapon HW)]
+    end
+    subgraph EXPERIENCE[Experience & Ops]
+        frontend["frontend<br/>Svelte / Android UI"]
+        manager["manager<br/>Docker/DCN orchestration"]
+        av["audiovisual-control<br/>Speaker + LEDs"]
+        servoDriver["servo-driver<br/>Waypoint UI"]
+    end
+
+    cam -->|/sensor/visual_light_full/image_raw| perc
+    cam -->|/sensor/visual_light/image_raw/compressed| backend
+    perc -->|/gimbal/cmd/absolute/dts<br/>+ detections| commander
+    unity -->|/gimbal/cmd/*/dts<br/>/drone positions| commander
+    tests -->|/gimbal/cmd/*/user| commander
+    backend -->|/command_mode<br/>/gimbal cmds - user| commander
+    commander -->|/gimbal/cmd/absolute| gimbal
+    commander -->|/gimbal/cmd/relative| gimbal
+    commander -->|/gimbal/cmd/velocity| gimbal
+    gimbal -->|/servo/cmd/trajectory<br/>JointTrajectory| servo
+    servo -->|EtherCAT CSP| mech
+    mech -->|Encoders| servo
+    servo -->|/servo/position<br/>ros2_interfaces/ServoState| gimbal
+    gimbal -->|/gimbal/state| backend
+    commander -->|/turret/command_mode<br/>/turret/drone_detected| backend
+    backend -->|HTTP MJPEG + SSE| frontend
+    backend -->|mDNS info| frontend
+    backend -->|/command_mode| av
+    commander -->|/fire/cmd| mech
+    commander -->|/fire/cmd| av
+    manager --> backend
+    manager --> commander
+    manager --> gimbal
+    manager --> servo
+    servoDriver -->|/servo/cmd/trajectory<br/>JointTrajectory| servo`
+
+	if !isTooComplex(source) {
+		t.Error("EXAMPLE.md flowchart should be detected as too complex")
+	}
+
+	// Also verify that the renderer returns ErrTooComplex
+	r := NewRenderer()
+	_, err := r.Render(source, 0)
+	if !errors.Is(err, ErrTooComplex) {
+		t.Errorf("Render() should return ErrTooComplex for complex diagram, got: %v", err)
+	}
+}
+
+func TestWidthLimitEnforcement(t *testing.T) {
+	r := NewRenderer()
+
+	// A simple diagram that renders to ~50 chars wide
+	source := `graph LR
+    A[Start] --> B[End]`
+
+	// Should succeed with no width limit
+	result, err := r.Render(source, 0)
+	if err != nil {
+		t.Fatalf("Render with no limit should succeed: %v", err)
+	}
+
+	// Get actual width
+	actualWidth := 0
+	for _, line := range strings.Split(result, "\n") {
+		if len([]rune(line)) > actualWidth {
+			actualWidth = len([]rune(line))
+		}
+	}
+
+	// Should succeed with generous width limit
+	_, err = r.Render(source, actualWidth+10)
+	if err != nil {
+		t.Errorf("Render with generous limit should succeed: %v", err)
+	}
+
+	// Should fail with tight width limit
+	_, err = r.Render(source, 10)
+	if !errors.Is(err, ErrTooComplex) {
+		t.Errorf("Render with tight limit should return ErrTooComplex, got: %v", err)
+	}
+}
+
+func TestTooComplexShowsOriginalWithNote(t *testing.T) {
+	// Create a mock renderer that returns ErrTooComplex
+	mock := &MockRenderer{
+		RenderFunc: func(source string) (string, error) {
+			return "", ErrTooComplex
+		},
+	}
+	p := NewPreprocessor(mock, 0)
+
+	markdown := "# Title\n\n```mermaid\ngraph LR\n    A --> B\n```\n\nText"
+	result := p.Process(markdown)
+
+	// Should contain the visual cue
+	if !strings.Contains(result, "⚠") {
+		t.Error("Result should contain warning symbol for too complex diagram")
+	}
+	if !strings.Contains(result, "too complex") {
+		t.Error("Result should mention 'too complex'")
+	}
+
+	// Should preserve the original mermaid block
+	if !strings.Contains(result, "```mermaid") {
+		t.Error("Result should preserve original mermaid code block")
+	}
+	if !strings.Contains(result, "graph LR") {
+		t.Error("Result should preserve original diagram source")
 	}
 }
