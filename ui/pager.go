@@ -104,6 +104,11 @@ type pagerModel struct {
 	currentDocument markdown
 
 	watcher *fsnotify.Watcher
+
+	// Outline sidebar
+	outline        outlineModel
+	showOutline    bool
+	outlineFocused bool
 }
 
 func newPagerModel(common *commonModel) pagerModel {
@@ -113,16 +118,35 @@ func newPagerModel(common *commonModel) pagerModel {
 	vp.HighPerformanceRendering = config.HighPerformancePager
 
 	m := pagerModel{
-		common:   common,
-		state:    pagerStateBrowse,
-		viewport: vp,
+		common:      common,
+		state:       pagerStateBrowse,
+		viewport:    vp,
+		outline:     newOutlineModel(common),
+		showOutline: common.cfg.ShowOutline,
 	}
 	m.initWatcher()
 	return m
 }
 
 func (m *pagerModel) setSize(w, h int) {
-	m.viewport.Width = w
+	contentWidth := w
+	outlineWidth := 0
+
+	// Calculate outline width if visible and viewing markdown
+	if m.showOutline && m.isMarkdownFile() {
+		outlineWidth = calculateOutlineWidth(w)
+		if outlineWidth > 0 {
+			contentWidth = w - outlineWidth
+			m.outline.visible = true
+			m.outline.setSize(outlineWidth, h-statusBarHeight)
+		} else {
+			m.outline.visible = false
+		}
+	} else {
+		m.outline.visible = false
+	}
+
+	m.viewport.Width = contentWidth
 	m.viewport.Height = h - statusBarHeight
 
 	if m.showHelp {
@@ -135,6 +159,11 @@ func (m *pagerModel) setSize(w, h int) {
 
 func (m *pagerModel) setContent(s string) {
 	m.viewport.SetContent(s)
+}
+
+// isMarkdownFile returns true if the current document is a markdown file.
+func (m *pagerModel) isMarkdownFile() bool {
+	return utils.IsMarkdownFile(m.currentDocument.Note)
 }
 
 func (m *pagerModel) toggleHelp() {
@@ -243,6 +272,74 @@ func (m pagerModel) update(msg tea.Msg) (pagerModel, tea.Cmd) {
 			if m.viewport.HighPerformanceRendering {
 				cmds = append(cmds, viewport.Sync(m.viewport))
 			}
+
+		case "o":
+			// Toggle outline visibility (only for markdown files)
+			if m.isMarkdownFile() {
+				m.showOutline = !m.showOutline
+				if !m.showOutline {
+					m.outlineFocused = false
+				}
+				m.setSize(m.common.width, m.common.height)
+				return m, renderWithGlamour(m, m.currentDocument.Body)
+			}
+
+		case "tab":
+			// Toggle focus between content and outline
+			if m.showOutline && m.outline.visible {
+				m.outlineFocused = !m.outlineFocused
+				m.outline.focused = m.outlineFocused
+				if m.outlineFocused {
+					// Sync cursor to current heading when gaining focus
+					m.outline.cursor = m.outline.current
+				}
+				m.outline.updateViewport()
+			}
+
+		case "]":
+			// Jump to next heading
+			if m.showOutline && len(m.outline.headings) > 0 {
+				nextIdx := m.outline.nextHeadingIndex()
+				if nextIdx >= 0 {
+					m.jumpToHeading(nextIdx)
+					if m.viewport.HighPerformanceRendering {
+						cmds = append(cmds, viewport.Sync(m.viewport))
+					}
+				}
+			}
+
+		case "[":
+			// Jump to previous heading
+			if m.showOutline && len(m.outline.headings) > 0 {
+				prevIdx := m.outline.prevHeadingIndex()
+				if prevIdx >= 0 {
+					m.jumpToHeading(prevIdx)
+					if m.viewport.HighPerformanceRendering {
+						cmds = append(cmds, viewport.Sync(m.viewport))
+					}
+				}
+			}
+
+		case "enter":
+			// Jump to selected heading when outline is focused
+			if m.outlineFocused && m.outline.visible {
+				m.jumpToHeading(m.outline.cursor)
+				if m.viewport.HighPerformanceRendering {
+					cmds = append(cmds, viewport.Sync(m.viewport))
+				}
+			}
+
+		case "j", "down":
+			if m.outlineFocused && m.outline.visible {
+				m.outline.moveCursorDown()
+				return m, nil
+			}
+
+		case "k", "up":
+			if m.outlineFocused && m.outline.visible {
+				m.outline.moveCursorUp()
+				return m, nil
+			}
 		}
 
 	// Glow has rendered the content
@@ -254,6 +351,11 @@ func (m pagerModel) update(msg tea.Msg) (pagerModel, tea.Cmd) {
 			cmds = append(cmds, viewport.Sync(m.viewport))
 		}
 		cmds = append(cmds, m.watchFile)
+
+		// Update outline with markdown content
+		if m.showOutline && m.isMarkdownFile() {
+			m.outline.setContent(m.currentDocument.Body)
+		}
 
 	// The file was changed on disk and we're reloading it
 	case reloadMsg:
@@ -277,12 +379,82 @@ func (m pagerModel) update(msg tea.Msg) (pagerModel, tea.Cmd) {
 	m.viewport, cmd = m.viewport.Update(msg)
 	cmds = append(cmds, cmd)
 
+	// Update current heading based on scroll position
+	if m.showOutline && m.outline.visible && !m.outlineFocused {
+		m.updateCurrentHeading()
+	}
+
 	return m, tea.Batch(cmds...)
+}
+
+// jumpToHeading scrolls the viewport to show the heading at the given index.
+func (m *pagerModel) jumpToHeading(headingIndex int) {
+	if headingIndex < 0 || headingIndex >= len(m.outline.headings) {
+		return
+	}
+
+	heading := m.outline.headings[headingIndex]
+
+	// Calculate approximate position in rendered content
+	// Use line ratio since glamour transforms the content
+	totalRawLines := strings.Count(m.currentDocument.Body, "\n") + 1
+	if totalRawLines == 0 {
+		return
+	}
+
+	ratio := float64(heading.Line) / float64(totalRawLines)
+	targetLine := int(ratio * float64(m.viewport.TotalLineCount()))
+
+	// Clamp to valid range
+	maxOffset := m.viewport.TotalLineCount() - m.viewport.Height
+	if maxOffset < 0 {
+		maxOffset = 0
+	}
+	if targetLine > maxOffset {
+		targetLine = maxOffset
+	}
+
+	m.viewport.YOffset = targetLine
+	m.outline.current = headingIndex
+	m.outline.cursor = headingIndex
+	m.outline.updateViewport()
+}
+
+// updateCurrentHeading updates the outline's current heading based on scroll position.
+func (m *pagerModel) updateCurrentHeading() {
+	if len(m.outline.headings) == 0 {
+		return
+	}
+
+	// Calculate current line from scroll position
+	currentLine := m.viewport.YOffset
+
+	// Convert to approximate raw markdown line
+	totalRenderedLines := m.viewport.TotalLineCount()
+	if totalRenderedLines == 0 {
+		return
+	}
+
+	totalRawLines := strings.Count(m.currentDocument.Body, "\n") + 1
+	ratio := float64(currentLine) / float64(totalRenderedLines)
+	rawLine := int(ratio * float64(totalRawLines))
+
+	m.outline.updateCurrent(rawLine)
 }
 
 func (m pagerModel) View() string {
 	var b strings.Builder
-	fmt.Fprint(&b, m.viewport.View()+"\n")
+
+	// Main content
+	content := m.viewport.View()
+
+	// Add outline sidebar if visible
+	if m.outline.visible {
+		outlineView := m.outline.View()
+		content = lipgloss.JoinHorizontal(lipgloss.Top, content, outlineView)
+	}
+
+	fmt.Fprint(&b, content+"\n")
 
 	// Footer
 	m.statusBarView(&b)
@@ -377,16 +549,23 @@ func (m pagerModel) helpView() (s string) {
 		"q       quit",
 	}
 
+	col2 := []string{
+		"o       toggle outline",
+		"tab     focus outline",
+		"]/[     next/prev heading",
+	}
+
 	s += "\n"
 	s += "k/↑      up                  " + col1[0] + "\n"
 	s += "j/↓      down                " + col1[1] + "\n"
 	s += "b/pgup   page up             " + col1[2] + "\n"
 	s += "f/pgdn   page down           " + col1[3] + "\n"
 	s += "u        ½ page up           " + col1[4] + "\n"
-	s += "d        ½ page down         "
-
-	if len(col1) > 5 {
-		s += col1[5]
+	s += "d        ½ page down         " + col1[5] + "\n"
+	s += "                             " + col1[6] + "\n"
+	s += "\n"
+	for _, item := range col2 {
+		s += item + "\n"
 	}
 
 	s = indent(s, 2)

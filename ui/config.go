@@ -4,6 +4,7 @@ package ui
 type Config struct {
 	ShowAllFiles     bool
 	ShowLineNumbers  bool
+	ShowOutline      bool   `env:"GLOW_SHOW_OUTLINE"`
 	Gopath           string `env:"GOPATH"`
 	HomeDir          string `env:"HOME"`
 	GlamourMaxWidth  uint
