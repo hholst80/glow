@@ -19,9 +19,10 @@ const (
 
 // Heading represents a markdown heading extracted from the document.
 type Heading struct {
-	Level int    // 1-6 for # through ######
-	Text  string // The heading text (without # prefix)
-	Line  int    // Line number in raw markdown (0-indexed)
+	Level        int    // 1-6 for # through ######
+	Text         string // The heading text (without # prefix)
+	Line         int    // Line number in raw markdown (0-indexed)
+	RenderedLine int    // Line number in rendered content (-1 if not mapped)
 }
 
 // outlineModel manages the outline sidebar state.
@@ -92,6 +93,56 @@ func (m *outlineModel) setContent(markdown string) {
 	m.cursor = 0
 	m.current = 0
 	m.updateViewport()
+}
+
+// mapHeadingsToRenderedLines updates the RenderedLine field for each heading
+// by finding the heading text in the rendered content.
+func (m *outlineModel) mapHeadingsToRenderedLines(renderedContent string) {
+	if renderedContent == "" || len(m.headings) == 0 {
+		return
+	}
+
+	lines := strings.Split(renderedContent, "\n")
+
+	// For each heading, find its position in the rendered content
+	// Start searching from where we expect it to be based on document order
+	searchStart := 0
+	for i := range m.headings {
+		m.headings[i].RenderedLine = -1 // Default to not found
+		headingLower := strings.ToLower(strings.TrimSpace(m.headings[i].Text))
+
+		// Search from searchStart to find this heading
+		for j := searchStart; j < len(lines); j++ {
+			stripped := stripANSI(lines[j])
+			strippedLower := strings.ToLower(strings.TrimSpace(stripped))
+
+			if strings.Contains(strippedLower, headingLower) {
+				m.headings[i].RenderedLine = j
+				searchStart = j + 1 // Next heading must be after this one
+				break
+			}
+		}
+	}
+}
+
+// stripANSI removes ANSI escape codes from a string.
+func stripANSI(s string) string {
+	var result strings.Builder
+	inEscape := false
+	for _, r := range s {
+		if r == '\x1b' {
+			inEscape = true
+			continue
+		}
+		if inEscape {
+			if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') {
+				inEscape = false
+			}
+			continue
+		}
+		result.WriteRune(r)
+	}
+	return result.String()
 }
 
 // setSize updates the outline dimensions.

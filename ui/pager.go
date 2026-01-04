@@ -366,9 +366,11 @@ func (m pagerModel) update(msg tea.Msg) (pagerModel, tea.Cmd) {
 		}
 		cmds = append(cmds, m.watchFile)
 
-		// Update outline with markdown content
-		if m.showOutline && m.isMarkdownFile() {
+		// Always parse headings for markdown files (needed for navigation)
+		// Then map them to rendered line positions
+		if m.isMarkdownFile() {
 			m.outline.setContent(m.currentDocument.Body)
+			m.outline.mapHeadingsToRenderedLines(string(msg))
 		}
 
 	// The file was changed on disk and we're reloading it
@@ -414,15 +416,17 @@ func (m *pagerModel) jumpToHeading(headingIndex int) {
 
 	heading := m.outline.headings[headingIndex]
 
-	// Calculate approximate position in rendered content
-	// Use line ratio since glamour transforms the content
-	totalRawLines := strings.Count(m.currentDocument.Body, "\n") + 1
-	if totalRawLines == 0 {
-		return
+	// Use pre-computed rendered line position
+	targetLine := heading.RenderedLine
+	if targetLine < 0 {
+		// Fallback to ratio-based approximation if not mapped
+		totalRawLines := strings.Count(m.currentDocument.Body, "\n") + 1
+		if totalRawLines == 0 {
+			return
+		}
+		ratio := float64(heading.Line) / float64(totalRawLines)
+		targetLine = int(ratio * float64(m.viewport.TotalLineCount()))
 	}
-
-	ratio := float64(heading.Line) / float64(totalRawLines)
-	targetLine := int(ratio * float64(m.viewport.TotalLineCount()))
 
 	// Apply scroll offset so heading appears scrollOff lines from top
 	scrollTarget := targetLine - scrollOff
