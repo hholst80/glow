@@ -43,6 +43,7 @@ var (
 	width            uint
 	showAllFiles     bool
 	showLineNumbers  bool
+	showOutline      bool
 	preserveNewLines bool
 	mouse            bool
 
@@ -174,6 +175,7 @@ func validateOptions(cmd *cobra.Command) error {
 	showAllFiles = viper.GetBool("all")
 	preserveNewLines = viper.GetBool("preserveNewLines")
 	showLineNumbers = viper.GetBool("showLineNumbers")
+	showOutline = viper.GetBool("showOutline")
 
 	if pager && tui {
 		return errors.New("cannot use both pager and tui")
@@ -362,6 +364,7 @@ func runTUI(path string, content string) error {
 	cfg.Path = path
 	cfg.ShowAllFiles = showAllFiles
 	cfg.ShowLineNumbers = showLineNumbers
+	cfg.ShowOutline = showOutline
 	cfg.GlamourMaxWidth = width
 	cfg.EnableMouse = mouse
 	cfg.PreserveNewLines = preserveNewLines
@@ -420,6 +423,7 @@ func init() {
 	rootCmd.Flags().UintVarP(&width, "width", "w", 0, "word-wrap at width (set to 0 to disable)")
 	rootCmd.Flags().BoolVarP(&showAllFiles, "all", "a", false, "show system files and directories (TUI-mode only)")
 	rootCmd.Flags().BoolVarP(&showLineNumbers, "line-numbers", "l", false, "show line numbers (TUI-mode only)")
+	rootCmd.Flags().BoolVarP(&showOutline, "outline", "o", false, "show outline sidebar (TUI-mode only)")
 	rootCmd.Flags().BoolVarP(&preserveNewLines, "preserve-new-lines", "n", false, "preserve newlines in the output")
 	rootCmd.Flags().BoolVarP(&mouse, "mouse", "m", false, "enable mouse wheel (TUI-mode only)")
 	_ = rootCmd.Flags().MarkHidden("mouse")
@@ -433,6 +437,7 @@ func init() {
 	_ = viper.BindPFlag("mouse", rootCmd.Flags().Lookup("mouse"))
 	_ = viper.BindPFlag("preserveNewLines", rootCmd.Flags().Lookup("preserve-new-lines"))
 	_ = viper.BindPFlag("showLineNumbers", rootCmd.Flags().Lookup("line-numbers"))
+	_ = viper.BindPFlag("showOutline", rootCmd.Flags().Lookup("outline"))
 	_ = viper.BindPFlag("all", rootCmd.Flags().Lookup("all"))
 
 	viper.SetDefault("style", styles.AutoStyle)

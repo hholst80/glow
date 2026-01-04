@@ -104,6 +104,11 @@ type pagerModel struct {
 	currentDocument markdown
 
 	watcher *fsnotify.Watcher
+
+	// Outline sidebar
+	outline        outlineModel
+	showOutline    bool
+	outlineFocused bool
 }
 
 func newPagerModel(common *commonModel) pagerModel {
@@ -113,16 +118,43 @@ func newPagerModel(common *commonModel) pagerModel {
 	vp.HighPerformanceRendering = config.HighPerformancePager
 
 	m := pagerModel{
-		common:   common,
-		state:    pagerStateBrowse,
-		viewport: vp,
+		common:      common,
+		state:       pagerStateBrowse,
+		viewport:    vp,
+		outline:     newOutlineModel(common),
+		showOutline: common.cfg.ShowOutline,
 	}
 	m.initWatcher()
 	return m
 }
 
 func (m *pagerModel) setSize(w, h int) {
-	m.viewport.Width = w
+	contentWidth := w
+	outlineWidth := 0
+
+	// Calculate outline width if visible and viewing markdown
+	if m.showOutline && m.isMarkdownFile() {
+		outlineWidth = calculateOutlineWidth(w)
+		if outlineWidth > 0 {
+			contentWidth = w - outlineWidth
+			m.outline.visible = true
+			m.outline.setSize(outlineWidth, h-statusBarHeight)
+		} else {
+			m.outline.visible = false
+		}
+	} else {
+		m.outline.visible = false
+	}
+
+	// Disable high performance rendering for markdown files because
+	// outline toggle changes layout and scroll regions don't work with sidebars
+	if m.isMarkdownFile() {
+		m.viewport.HighPerformanceRendering = false
+	} else {
+		m.viewport.HighPerformanceRendering = config.HighPerformancePager
+	}
+
+	m.viewport.Width = contentWidth
 	m.viewport.Height = h - statusBarHeight
 
 	if m.showHelp {
@@ -135,6 +167,11 @@ func (m *pagerModel) setSize(w, h int) {
 
 func (m *pagerModel) setContent(s string) {
 	m.viewport.SetContent(s)
+}
+
+// isMarkdownFile returns true if the current document is a markdown file.
+func (m *pagerModel) isMarkdownFile() bool {
+	return utils.IsMarkdownFile(m.currentDocument.Note)
 }
 
 func (m *pagerModel) toggleHelp() {
@@ -243,17 +280,98 @@ func (m pagerModel) update(msg tea.Msg) (pagerModel, tea.Cmd) {
 			if m.viewport.HighPerformanceRendering {
 				cmds = append(cmds, viewport.Sync(m.viewport))
 			}
+
+		case "o":
+			// Toggle outline visibility (only for markdown files)
+			if m.isMarkdownFile() {
+				m.showOutline = !m.showOutline
+				if !m.showOutline {
+					m.outlineFocused = false
+				} else {
+					// Parse headings immediately when enabling outline
+					m.outline.setContent(m.currentDocument.Body)
+				}
+				m.setSize(m.common.width, m.common.height)
+				// Re-render content at new width
+				return m, renderWithGlamour(m, m.currentDocument.Body)
+			}
+
+		case "tab":
+			// Toggle focus between content and outline
+			if m.showOutline && m.outline.visible {
+				m.outlineFocused = !m.outlineFocused
+				m.outline.focused = m.outlineFocused
+				if m.outlineFocused {
+					// Sync cursor to current heading when gaining focus
+					m.outline.cursor = m.outline.current
+				}
+				m.outline.updateViewport()
+			}
+
+		case "]":
+			// Jump to next heading
+			if m.showOutline && len(m.outline.headings) > 0 {
+				nextIdx := m.outline.nextHeadingIndex()
+				if nextIdx >= 0 {
+					m.jumpToHeading(nextIdx)
+					if m.viewport.HighPerformanceRendering {
+						cmds = append(cmds, viewport.Sync(m.viewport))
+					}
+				}
+			}
+
+		case "[":
+			// Jump to previous heading
+			if m.showOutline && len(m.outline.headings) > 0 {
+				prevIdx := m.outline.prevHeadingIndex()
+				if prevIdx >= 0 {
+					m.jumpToHeading(prevIdx)
+					if m.viewport.HighPerformanceRendering {
+						cmds = append(cmds, viewport.Sync(m.viewport))
+					}
+				}
+			}
+
+		case "enter":
+			// Jump to selected heading when outline is focused
+			if m.outlineFocused && m.outline.visible {
+				m.jumpToHeading(m.outline.cursor)
+				if m.viewport.HighPerformanceRendering {
+					cmds = append(cmds, viewport.Sync(m.viewport))
+				}
+			}
+
+		case "j", "down":
+			if m.outlineFocused && m.outline.visible {
+				m.outline.moveCursorDown()
+				return m, nil
+			}
+
+		case "k", "up":
+			if m.outlineFocused && m.outline.visible {
+				m.outline.moveCursorUp()
+				return m, nil
+			}
 		}
 
 	// Glow has rendered the content
 	case contentRenderedMsg:
 		log.Info("content rendered", "state", m.state)
 
+		m.setSize(m.common.width, m.common.height)
 		m.setContent(string(msg))
+
 		if m.viewport.HighPerformanceRendering {
 			cmds = append(cmds, viewport.Sync(m.viewport))
 		}
 		cmds = append(cmds, m.watchFile)
+
+		// Always parse headings for markdown files (needed for navigation)
+		// Then map them to rendered line positions
+		if m.isMarkdownFile() {
+			m.outline.setContent(m.currentDocument.Body)
+			m.outline.mapHeadingsToRenderedLines(string(msg))
+		}
 
 	// The file was changed on disk and we're reloading it
 	case reloadMsg:
@@ -277,12 +395,94 @@ func (m pagerModel) update(msg tea.Msg) (pagerModel, tea.Cmd) {
 	m.viewport, cmd = m.viewport.Update(msg)
 	cmds = append(cmds, cmd)
 
+	// Update current heading based on scroll position
+	if m.showOutline && m.outline.visible && !m.outlineFocused {
+		m.updateCurrentHeading()
+	}
+
 	return m, tea.Batch(cmds...)
+}
+
+// scrollOff is the number of lines to keep visible above/below when jumping to headings.
+// Similar to Vim's scrolloff setting.
+const scrollOff = 5
+
+// jumpToHeading scrolls the viewport to show the heading at the given index.
+// The heading is positioned with scrollOff lines of context above it.
+func (m *pagerModel) jumpToHeading(headingIndex int) {
+	if headingIndex < 0 || headingIndex >= len(m.outline.headings) {
+		return
+	}
+
+	heading := m.outline.headings[headingIndex]
+
+	// Use pre-computed rendered line position
+	targetLine := heading.RenderedLine
+	if targetLine < 0 {
+		// Fallback to ratio-based approximation if not mapped
+		totalRawLines := strings.Count(m.currentDocument.Body, "\n") + 1
+		if totalRawLines == 0 {
+			return
+		}
+		ratio := float64(heading.Line) / float64(totalRawLines)
+		targetLine = int(ratio * float64(m.viewport.TotalLineCount()))
+	}
+
+	// Apply scroll offset so heading appears scrollOff lines from top
+	scrollTarget := targetLine - scrollOff
+	if scrollTarget < 0 {
+		scrollTarget = 0
+	}
+
+	// Clamp to valid range
+	maxOffset := m.viewport.TotalLineCount() - m.viewport.Height
+	if maxOffset < 0 {
+		maxOffset = 0
+	}
+	if scrollTarget > maxOffset {
+		scrollTarget = maxOffset
+	}
+
+	m.viewport.YOffset = scrollTarget
+	m.outline.current = headingIndex
+	m.outline.cursor = headingIndex
+	m.outline.updateViewport()
+}
+
+// updateCurrentHeading updates the outline's current heading based on scroll position.
+func (m *pagerModel) updateCurrentHeading() {
+	if len(m.outline.headings) == 0 {
+		return
+	}
+
+	// Calculate current line from scroll position
+	currentLine := m.viewport.YOffset
+
+	// Convert to approximate raw markdown line
+	totalRenderedLines := m.viewport.TotalLineCount()
+	if totalRenderedLines == 0 {
+		return
+	}
+
+	totalRawLines := strings.Count(m.currentDocument.Body, "\n") + 1
+	ratio := float64(currentLine) / float64(totalRenderedLines)
+	rawLine := int(ratio * float64(totalRawLines))
+
+	m.outline.updateCurrent(rawLine)
 }
 
 func (m pagerModel) View() string {
 	var b strings.Builder
-	fmt.Fprint(&b, m.viewport.View()+"\n")
+
+	// Main content
+	content := m.viewport.View()
+
+	// Add outline sidebar if visible
+	if m.outline.visible && len(m.outline.headings) > 0 {
+		content = m.joinContentAndOutline(content, m.outline.View())
+	}
+
+	fmt.Fprint(&b, content+"\n")
 
 	// Footer
 	m.statusBarView(&b)
@@ -292,6 +492,46 @@ func (m pagerModel) View() string {
 	}
 
 	return b.String()
+}
+
+// joinContentAndOutline joins the main content and outline sidebar line by line.
+// This is more reliable than lipgloss.JoinHorizontal for ANSI-styled content.
+func (m pagerModel) joinContentAndOutline(content, outline string) string {
+	contentLines := strings.Split(content, "\n")
+	outlineLines := strings.Split(outline, "\n")
+
+	// Ensure we have enough lines
+	maxLines := len(contentLines)
+	if len(outlineLines) > maxLines {
+		maxLines = len(outlineLines)
+	}
+
+	var result strings.Builder
+	for i := 0; i < maxLines; i++ {
+		var contentLine, outlineLine string
+
+		if i < len(contentLines) {
+			contentLine = contentLines[i]
+		}
+		if i < len(outlineLines) {
+			outlineLine = outlineLines[i]
+		}
+
+		// Pad content line to viewport width
+		contentWidth := ansi.PrintableRuneWidth(contentLine)
+		if contentWidth < m.viewport.Width {
+			contentLine += strings.Repeat(" ", m.viewport.Width-contentWidth)
+		}
+
+		result.WriteString(contentLine)
+		result.WriteString(outlineLine)
+
+		if i < maxLines-1 {
+			result.WriteString("\n")
+		}
+	}
+
+	return result.String()
 }
 
 func (m pagerModel) statusBarView(b *strings.Builder) {
@@ -377,16 +617,23 @@ func (m pagerModel) helpView() (s string) {
 		"q       quit",
 	}
 
+	col2 := []string{
+		"o       toggle outline",
+		"tab     focus outline",
+		"]/[     next/prev heading",
+	}
+
 	s += "\n"
 	s += "k/↑      up                  " + col1[0] + "\n"
 	s += "j/↓      down                " + col1[1] + "\n"
 	s += "b/pgup   page up             " + col1[2] + "\n"
 	s += "f/pgdn   page down           " + col1[3] + "\n"
 	s += "u        ½ page up           " + col1[4] + "\n"
-	s += "d        ½ page down         "
-
-	if len(col1) > 5 {
-		s += col1[5]
+	s += "d        ½ page down         " + col1[5] + "\n"
+	s += "                             " + col1[6] + "\n"
+	s += "\n"
+	for _, item := range col2 {
+		s += item + "\n"
 	}
 
 	s = indent(s, 2)

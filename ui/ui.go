@@ -173,10 +173,17 @@ func newModel(cfg Config, content string) tea.Model {
 	} else {
 		cwd, _ := os.Getwd()
 		m.state = stateShowDocument
+		// Read the file content now so outline can parse it
+		content, err := os.ReadFile(path)
+		var body string
+		if err == nil {
+			body = string(utils.RemoveFrontmatter(content))
+		}
 		m.pager.currentDocument = markdown{
 			localPath: path,
 			Note:      stripAbsolutePath(path, cwd),
 			Modtime:   info.ModTime(),
+			Body:      body,
 		}
 	}
 
@@ -190,13 +197,8 @@ func (m model) Init() tea.Cmd {
 	case stateShowStash:
 		cmds = append(cmds, findLocalFiles(*m.common))
 	case stateShowDocument:
-		content, err := os.ReadFile(m.common.cfg.Path)
-		if err != nil {
-			log.Error("unable to read file", "file", m.common.cfg.Path, "error", err)
-			return func() tea.Msg { return errMsg{err} }
-		}
-		body := string(utils.RemoveFrontmatter(content))
-		cmds = append(cmds, renderWithGlamour(m.pager, body))
+		// Body was already loaded in newModel
+		cmds = append(cmds, renderWithGlamour(m.pager, m.pager.currentDocument.Body))
 	}
 
 	return tea.Batch(cmds...)
