@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"strings"
 	"testing"
 )
 
@@ -219,5 +220,244 @@ func TestOutlineModelUpdateCurrent(t *testing.T) {
 	m.updateCurrent(4)
 	if m.current != 2 {
 		t.Errorf("updateCurrent(4) set current = %d, want 2", m.current)
+	}
+}
+
+func TestPagerOutlineIntegration(t *testing.T) {
+	// Test that outline works correctly when toggled
+	common := &commonModel{
+		cfg:    Config{ShowOutline: false},
+		width:  120,
+		height: 40,
+	}
+
+	m := newPagerModel(common)
+	m.currentDocument = markdown{
+		Note: "test.md",
+		Body: "# Title\n## Section 1\nSome content\n## Section 2\nMore content",
+	}
+
+	// Initially outline should be off
+	if m.showOutline {
+		t.Error("showOutline should be false initially")
+	}
+
+	// Toggle outline on
+	m.showOutline = true
+	m.setSize(common.width, common.height)
+
+	// Outline should now be visible (width > 80)
+	if !m.outline.visible {
+		t.Errorf("outline.visible should be true after enabling, got false (width=%d)", common.width)
+	}
+
+	// Parse headings
+	m.outline.setContent(m.currentDocument.Body)
+
+	// Should have 3 headings
+	if len(m.outline.headings) != 3 {
+		t.Errorf("expected 3 headings, got %d", len(m.outline.headings))
+	}
+
+	// Test with narrow terminal (< 80)
+	common.width = 60
+	m.setSize(common.width, common.height)
+
+	// Outline should not be visible on narrow terminal
+	if m.outline.visible {
+		t.Error("outline.visible should be false when terminal width < 80")
+	}
+}
+
+func TestPagerIsMarkdownFile(t *testing.T) {
+	common := &commonModel{
+		cfg:    Config{},
+		width:  120,
+		height: 40,
+	}
+
+	tests := []struct {
+		note     string
+		expected bool
+	}{
+		{"README.md", true},
+		{"doc.markdown", true},
+		{"file.txt", false},
+		{"code.go", false},
+		{"", true}, // Empty extension defaults to markdown
+	}
+
+	for _, tt := range tests {
+		m := newPagerModel(common)
+		m.currentDocument = markdown{Note: tt.note}
+		got := m.isMarkdownFile()
+		if got != tt.expected {
+			t.Errorf("isMarkdownFile() with Note=%q = %v, want %v", tt.note, got, tt.expected)
+		}
+	}
+}
+
+func TestOutlineViewRendering(t *testing.T) {
+	common := &commonModel{}
+	m := newOutlineModel(common)
+
+	// Set up outline with test content
+	testMd := "# Title\n## Section 1\nContent here\n## Section 2\nMore content\n### Subsection"
+	m.setContent(testMd)
+	m.setSize(30, 20)
+	m.visible = true
+
+	// Verify headings were parsed
+	if len(m.headings) != 4 {
+		t.Errorf("Expected 4 headings, got %d", len(m.headings))
+	}
+
+	// Get the view output
+	view := m.View()
+
+	// View should not be empty
+	if view == "" {
+		t.Error("outline.View() returned empty string")
+	}
+
+	// View should contain "OUTLINE" title
+	if !strings.Contains(view, "OUTLINE") {
+		t.Errorf("outline.View() should contain 'OUTLINE', got: %q", view)
+	}
+
+	// View should contain heading text
+	if !strings.Contains(view, "Title") {
+		t.Errorf("outline.View() should contain 'Title', got: %q", view)
+	}
+
+	t.Logf("Outline view output:\n%s", view)
+	t.Logf("View length: %d chars, %d lines", len(view), strings.Count(view, "\n")+1)
+}
+
+func TestPagerViewWithOutline(t *testing.T) {
+	common := &commonModel{
+		cfg:    Config{ShowOutline: true},
+		width:  100,
+		height: 25,
+	}
+
+	m := newPagerModel(common)
+	m.currentDocument = markdown{
+		Note: "test.md",
+		Body: "# Title\n## Section 1\nContent here\n## Section 2\nMore content",
+	}
+
+	// Enable outline
+	m.showOutline = true
+	m.setSize(common.width, common.height)
+
+	// Parse headings
+	m.outline.setContent(m.currentDocument.Body)
+
+	// Set some viewport content
+	m.viewport.SetContent("Line 1\nLine 2\nLine 3\nLine 4\nLine 5")
+
+	t.Logf("Pager state:")
+	t.Logf("  showOutline: %v", m.showOutline)
+	t.Logf("  outline.visible: %v", m.outline.visible)
+	t.Logf("  outline.headings: %d", len(m.outline.headings))
+	t.Logf("  outline.width: %d", m.outline.width)
+	t.Logf("  outline.height: %d", m.outline.height)
+	t.Logf("  viewport.Width: %d", m.viewport.Width)
+	t.Logf("  viewport.Height: %d", m.viewport.Height)
+
+	// Get pager view
+	view := m.View()
+
+	t.Logf("Pager view output (%d chars):\n%s", len(view), view)
+
+	// View should contain outline
+	if !strings.Contains(view, "OUTLINE") {
+		t.Error("Pager view should contain 'OUTLINE'")
+	}
+}
+
+func TestPagerViewWithANSIContent(t *testing.T) {
+	common := &commonModel{
+		cfg:    Config{ShowOutline: true},
+		width:  100,
+		height: 25,
+	}
+
+	m := newPagerModel(common)
+	m.currentDocument = markdown{
+		Note: "test.md",
+		Body: "# Title\n## Section 1\nContent here",
+	}
+
+	// Enable outline
+	m.showOutline = true
+	m.setSize(common.width, common.height)
+
+	// Parse headings
+	m.outline.setContent(m.currentDocument.Body)
+
+	// Set viewport content with ANSI codes (simulating glamour output)
+	// This includes bold, colors, etc.
+	ansiContent := "\x1b[1m# Title\x1b[0m\n\x1b[38;5;208mSection 1\x1b[0m\nSome \x1b[4munderlined\x1b[0m text\nLine 4\nLine 5"
+	m.viewport.SetContent(ansiContent)
+
+	t.Logf("Pager state:")
+	t.Logf("  viewport.Width: %d", m.viewport.Width)
+	t.Logf("  outline.width: %d", m.outline.width)
+
+	// Get pager view
+	view := m.View()
+
+	t.Logf("Pager view (showing first 1000 chars):\n%s", view[:min(len(view), 1000)])
+
+	// View should contain outline
+	if !strings.Contains(view, "OUTLINE") {
+		t.Error("Pager view should contain 'OUTLINE' with ANSI content")
+	}
+}
+
+func TestPagerViewWithHighPerfRendering(t *testing.T) {
+	// This test simulates the actual runtime environment
+	// where HighPerformanceRendering may be enabled
+	config = Config{
+		HighPerformancePager: true,
+		ShowOutline:          true,
+	}
+
+	common := &commonModel{
+		cfg:    config,
+		width:  100,
+		height: 25,
+	}
+
+	m := newPagerModel(common)
+
+	t.Logf("HighPerformanceRendering: %v", m.viewport.HighPerformanceRendering)
+
+	m.currentDocument = markdown{
+		Note: "test.md",
+		Body: "# Title\n## Section 1\nContent here",
+	}
+
+	// Enable outline
+	m.showOutline = true
+	m.setSize(common.width, common.height)
+
+	// Parse headings
+	m.outline.setContent(m.currentDocument.Body)
+
+	// Set viewport content
+	m.viewport.SetContent("Line 1\nLine 2\nLine 3\nLine 4\nLine 5")
+
+	// Get pager view
+	view := m.View()
+
+	t.Logf("View length: %d", len(view))
+	t.Logf("Pager view:\n%s", view)
+
+	// View should contain outline
+	if !strings.Contains(view, "OUTLINE") {
+		t.Error("Pager view should contain 'OUTLINE' with HighPerformanceRendering")
 	}
 }

@@ -146,6 +146,14 @@ func (m *pagerModel) setSize(w, h int) {
 		m.outline.visible = false
 	}
 
+	// Disable high performance rendering for markdown files because
+	// outline toggle changes layout and scroll regions don't work with sidebars
+	if m.isMarkdownFile() {
+		m.viewport.HighPerformanceRendering = false
+	} else {
+		m.viewport.HighPerformanceRendering = config.HighPerformancePager
+	}
+
 	m.viewport.Width = contentWidth
 	m.viewport.Height = h - statusBarHeight
 
@@ -279,8 +287,12 @@ func (m pagerModel) update(msg tea.Msg) (pagerModel, tea.Cmd) {
 				m.showOutline = !m.showOutline
 				if !m.showOutline {
 					m.outlineFocused = false
+				} else {
+					// Parse headings immediately when enabling outline
+					m.outline.setContent(m.currentDocument.Body)
 				}
 				m.setSize(m.common.width, m.common.height)
+				// Re-render content at new width
 				return m, renderWithGlamour(m, m.currentDocument.Body)
 			}
 
@@ -346,7 +358,9 @@ func (m pagerModel) update(msg tea.Msg) (pagerModel, tea.Cmd) {
 	case contentRenderedMsg:
 		log.Info("content rendered", "state", m.state)
 
+		m.setSize(m.common.width, m.common.height)
 		m.setContent(string(msg))
+
 		if m.viewport.HighPerformanceRendering {
 			cmds = append(cmds, viewport.Sync(m.viewport))
 		}
@@ -387,7 +401,12 @@ func (m pagerModel) update(msg tea.Msg) (pagerModel, tea.Cmd) {
 	return m, tea.Batch(cmds...)
 }
 
+// scrollOff is the number of lines to keep visible above/below when jumping to headings.
+// Similar to Vim's scrolloff setting.
+const scrollOff = 5
+
 // jumpToHeading scrolls the viewport to show the heading at the given index.
+// The heading is positioned with scrollOff lines of context above it.
 func (m *pagerModel) jumpToHeading(headingIndex int) {
 	if headingIndex < 0 || headingIndex >= len(m.outline.headings) {
 		return
@@ -405,16 +424,22 @@ func (m *pagerModel) jumpToHeading(headingIndex int) {
 	ratio := float64(heading.Line) / float64(totalRawLines)
 	targetLine := int(ratio * float64(m.viewport.TotalLineCount()))
 
+	// Apply scroll offset so heading appears scrollOff lines from top
+	scrollTarget := targetLine - scrollOff
+	if scrollTarget < 0 {
+		scrollTarget = 0
+	}
+
 	// Clamp to valid range
 	maxOffset := m.viewport.TotalLineCount() - m.viewport.Height
 	if maxOffset < 0 {
 		maxOffset = 0
 	}
-	if targetLine > maxOffset {
-		targetLine = maxOffset
+	if scrollTarget > maxOffset {
+		scrollTarget = maxOffset
 	}
 
-	m.viewport.YOffset = targetLine
+	m.viewport.YOffset = scrollTarget
 	m.outline.current = headingIndex
 	m.outline.cursor = headingIndex
 	m.outline.updateViewport()
@@ -449,9 +474,8 @@ func (m pagerModel) View() string {
 	content := m.viewport.View()
 
 	// Add outline sidebar if visible
-	if m.outline.visible {
-		outlineView := m.outline.View()
-		content = lipgloss.JoinHorizontal(lipgloss.Top, content, outlineView)
+	if m.outline.visible && len(m.outline.headings) > 0 {
+		content = m.joinContentAndOutline(content, m.outline.View())
 	}
 
 	fmt.Fprint(&b, content+"\n")
@@ -464,6 +488,46 @@ func (m pagerModel) View() string {
 	}
 
 	return b.String()
+}
+
+// joinContentAndOutline joins the main content and outline sidebar line by line.
+// This is more reliable than lipgloss.JoinHorizontal for ANSI-styled content.
+func (m pagerModel) joinContentAndOutline(content, outline string) string {
+	contentLines := strings.Split(content, "\n")
+	outlineLines := strings.Split(outline, "\n")
+
+	// Ensure we have enough lines
+	maxLines := len(contentLines)
+	if len(outlineLines) > maxLines {
+		maxLines = len(outlineLines)
+	}
+
+	var result strings.Builder
+	for i := 0; i < maxLines; i++ {
+		var contentLine, outlineLine string
+
+		if i < len(contentLines) {
+			contentLine = contentLines[i]
+		}
+		if i < len(outlineLines) {
+			outlineLine = outlineLines[i]
+		}
+
+		// Pad content line to viewport width
+		contentWidth := ansi.PrintableRuneWidth(contentLine)
+		if contentWidth < m.viewport.Width {
+			contentLine += strings.Repeat(" ", m.viewport.Width-contentWidth)
+		}
+
+		result.WriteString(contentLine)
+		result.WriteString(outlineLine)
+
+		if i < maxLines-1 {
+			result.WriteString("\n")
+		}
+	}
+
+	return result.String()
 }
 
 func (m pagerModel) statusBarView(b *strings.Builder) {
