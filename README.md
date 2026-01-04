@@ -58,12 +58,27 @@ go build
 
 Simply run `glow` without arguments to start the textual user interface and
 browse local. Glow will find local markdown files in the
-current directory and below or, if you’re in a Git repository, Glow will search
+current directory and below or, if you're in a Git repository, Glow will search
 the repo.
 
 Markdown files can be read with Glow's high-performance pager. Most of the
 keystrokes you know from `less` are the same, but you can press `?` to list
 the hotkeys.
+
+### Outline Sidebar
+
+Press `o` to toggle a right-aligned outline sidebar that shows a hierarchical
+tree of markdown headings. The sidebar highlights the current section as you
+scroll and supports jump-to navigation:
+
+- `o` - Toggle outline visibility
+- `Tab` - Switch focus between content and outline
+- `j/k` - Navigate headings (when outline focused)
+- `Enter` - Jump to selected heading
+- `]/[` - Quick next/prev heading navigation
+
+Enable outline on startup with `--outline` or `-o` flag, or set `showOutline: true`
+in your config file.
 
 ## The CLI
 
@@ -145,6 +160,8 @@ width: 80
 all: false
 # show line numbers (TUI-mode only)
 showLineNumbers: false
+# show outline sidebar (TUI-mode only)
+showOutline: false
 # preserve newlines in the output
 preserveNewLines: false
 ```
