@@ -24,6 +24,13 @@ Use it to discover markdown files, read documentation directly on the command
 line. Glow will find local markdown files in subdirectories or a local
 Git repository.
 
+## Fork Features
+
+This fork is based on upstream commit [`752de97`](https://github.com/charmbracelet/glow/commit/752de97c5a331af0eed0c7b417462621bffa533e) and adds:
+
+- **Mermaid Diagram Rendering** - ASCII art rendering of mermaid code blocks
+- **Outline Sidebar** - Right-aligned hierarchical heading navigation in TUI mode
+
 ## Installation
 
 ### Download Binary
@@ -64,6 +71,15 @@ the repo.
 Markdown files can be read with Glow's high-performance pager. Most of the
 keystrokes you know from `less` are the same, but you can press `?` to list
 the hotkeys.
+
+### Mermaid Diagrams
+
+Glow automatically renders Mermaid diagrams as ASCII art in the terminal. Supported
+diagram types include flowcharts (`graph LR`, `graph TD`) and sequence diagrams.
+
+If a diagram is too complex to render clearly at the current terminal width, Glow
+displays the original mermaid source with a visual indicator instead of a garbled
+rendering.
 
 ### Outline Sidebar
 
@@ -176,5 +192,6 @@ See [AGENTS.md](AGENTS.md) for development guidelines.
 
 ---
 
-This is a fork of [charmbracelet/glow](https://github.com/charmbracelet/glow).
+This is a fork of [charmbracelet/glow](https://github.com/charmbracelet/glow),
+based on commit [`752de97`](https://github.com/charmbracelet/glow/commit/752de97c5a331af0eed0c7b417462621bffa533e).
 Original project by [Charm](https://charm.sh).
