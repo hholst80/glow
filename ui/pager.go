@@ -9,8 +9,6 @@ import (
 
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/glamour"
-	"github.com/charmbracelet/glow/v2/mermaid"
 	"github.com/charmbracelet/glow/v2/utils"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/log"
@@ -668,43 +666,23 @@ func renderWithGlamour(m pagerModel, md string) tea.Cmd {
 func glamourRender(m pagerModel, markdown string) (string, error) {
 	trunc := lipgloss.NewStyle().MaxWidth(m.viewport.Width - lineNumberWidth).Render
 
-	if !config.GlamourEnabled {
+	if !m.common.cfg.GlamourEnabled {
 		return markdown, nil
 	}
 
 	isCode := !utils.IsMarkdownFile(m.currentDocument.Note)
 	width := max(0, min(int(m.common.cfg.GlamourMaxWidth), m.viewport.Width)) //nolint:gosec
-	if isCode {
-		width = 0
-	}
 
-	options := []glamour.TermRendererOption{
-		utils.GlamourStyle(m.common.cfg.GlamourStyle, isCode),
-		glamour.WithWordWrap(width),
-	}
-
-	if m.common.cfg.PreserveNewLines {
-		options = append(options, glamour.WithPreservedNewLines())
-	}
-	r, err := glamour.NewTermRenderer(options...)
+	// Use the injected renderer
+	out, err := m.common.renderer.Render(
+		markdown,
+		width,
+		m.common.cfg.GlamourStyle,
+		m.currentDocument.Note,
+		m.common.cfg.PreserveNewLines,
+	)
 	if err != nil {
-		return "", fmt.Errorf("error creating glamour renderer: %w", err)
-	}
-
-	if isCode {
-		markdown = utils.WrapCodeBlock(markdown, filepath.Ext(m.currentDocument.Note))
-	}
-
-	// Preprocess mermaid diagrams before rendering
-	markdown = mermaid.ProcessMarkdown(markdown, width)
-
-	out, err := r.Render(markdown)
-	if err != nil {
-		return "", fmt.Errorf("error rendering markdown: %w", err)
-	}
-
-	if isCode {
-		out = strings.TrimSpace(out)
+		return "", err
 	}
 
 	// trim lines
