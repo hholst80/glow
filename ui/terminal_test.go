@@ -126,50 +126,57 @@ func TestRealTerminal_ImplementsInterface(t *testing.T) {
 	_ = term
 }
 
-func TestNewModelWithTerminal_DarkBackground(t *testing.T) {
+func TestNewModel_DarkBackground(t *testing.T) {
 	term := &TestTerminal{DarkBackground: true}
+	renderer := &TestMarkdownRenderer{}
 	cfg := Config{GlamourStyle: "auto"}
 
-	model := newModelWithTerminal(cfg, "", term).(model)
+	m := newModel(cfg, "", term, renderer).(model)
 
 	// When terminal has dark background, style should be set to dark
-	if model.common.cfg.GlamourStyle != "dark" {
-		t.Errorf("GlamourStyle = %q, want %q for dark background", model.common.cfg.GlamourStyle, "dark")
+	if m.common.cfg.GlamourStyle != "dark" {
+		t.Errorf("GlamourStyle = %q, want %q for dark background", m.common.cfg.GlamourStyle, "dark")
 	}
 }
 
-func TestNewModelWithTerminal_LightBackground(t *testing.T) {
+func TestNewModel_LightBackground(t *testing.T) {
 	term := &TestTerminal{DarkBackground: false}
+	renderer := &TestMarkdownRenderer{}
 	cfg := Config{GlamourStyle: "auto"}
 
-	model := newModelWithTerminal(cfg, "", term).(model)
+	m := newModel(cfg, "", term, renderer).(model)
 
 	// When terminal has light background, style should be set to light
-	if model.common.cfg.GlamourStyle != "light" {
-		t.Errorf("GlamourStyle = %q, want %q for light background", model.common.cfg.GlamourStyle, "light")
+	if m.common.cfg.GlamourStyle != "light" {
+		t.Errorf("GlamourStyle = %q, want %q for light background", m.common.cfg.GlamourStyle, "light")
 	}
 }
 
-func TestNewModelWithTerminal_ExplicitStyle(t *testing.T) {
+func TestNewModel_ExplicitStyle(t *testing.T) {
 	term := &TestTerminal{DarkBackground: true}
+	renderer := &TestMarkdownRenderer{}
 	cfg := Config{GlamourStyle: "dracula"} // Explicit style, not "auto"
 
-	model := newModelWithTerminal(cfg, "", term).(model)
+	m := newModel(cfg, "", term, renderer).(model)
 
 	// When an explicit style is set, it should be preserved
-	if model.common.cfg.GlamourStyle != "dracula" {
-		t.Errorf("GlamourStyle = %q, want %q for explicit style", model.common.cfg.GlamourStyle, "dracula")
+	if m.common.cfg.GlamourStyle != "dracula" {
+		t.Errorf("GlamourStyle = %q, want %q for explicit style", m.common.cfg.GlamourStyle, "dracula")
 	}
 }
 
-func TestNewModelWithTerminal_TerminalInjection(t *testing.T) {
+func TestNewModel_DependencyInjection(t *testing.T) {
 	term := NewTestTerminal()
+	renderer := &TestMarkdownRenderer{}
 	cfg := Config{}
 
-	model := newModelWithTerminal(cfg, "", term).(model)
+	m := newModel(cfg, "", term, renderer).(model)
 
-	// Verify the terminal is properly injected into commonModel
-	if model.common.terminal != term {
+	// Verify both dependencies are properly injected into commonModel
+	if m.common.terminal != term {
 		t.Error("terminal was not properly injected into commonModel")
+	}
+	if m.common.renderer != renderer {
+		t.Error("renderer was not properly injected into commonModel")
 	}
 }

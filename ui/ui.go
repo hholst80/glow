@@ -28,14 +28,14 @@ var (
 	}
 )
 
-// NewProgram returns a new Tea program using the real terminal.
+// NewProgram returns a new Tea program using the real terminal and renderer.
 func NewProgram(cfg Config, content string) *tea.Program {
-	return NewProgramWithTerminal(cfg, content, RealTerminal{})
+	return NewProgramWithDeps(cfg, content, RealTerminal{}, NewMarkdownRenderer())
 }
 
-// NewProgramWithTerminal returns a new Tea program with an injected Terminal.
-// This is the composition root for dependency injection.
-func NewProgramWithTerminal(cfg Config, content string, term Terminal) *tea.Program {
+// NewProgramWithDeps returns a new Tea program with injectable dependencies.
+// This is the composition root for dependency injection, enabling testability.
+func NewProgramWithDeps(cfg Config, content string, term Terminal, renderer MarkdownRenderer) *tea.Program {
 	log.Debug(
 		"Starting glow",
 		"high_perf_pager",
@@ -49,7 +49,7 @@ func NewProgramWithTerminal(cfg Config, content string, term Terminal) *tea.Prog
 	if cfg.EnableMouse {
 		opts = append(opts, tea.WithMouseCellMotion())
 	}
-	m := newModelWithTerminal(cfg, content, term)
+	m := newModel(cfg, content, term, renderer)
 	return tea.NewProgram(m, opts...)
 }
 
@@ -98,6 +98,7 @@ func (s state) String() string {
 type commonModel struct {
 	cfg      Config
 	terminal Terminal
+	renderer MarkdownRenderer
 	cwd      string
 	width    int
 	height   int
@@ -136,11 +137,7 @@ func (m *model) unloadDocument() []tea.Cmd {
 	return batch
 }
 
-func newModel(cfg Config, content string) tea.Model {
-	return newModelWithTerminal(cfg, content, RealTerminal{})
-}
-
-func newModelWithTerminal(cfg Config, content string, term Terminal) tea.Model {
+func newModel(cfg Config, content string, term Terminal, renderer MarkdownRenderer) tea.Model {
 	initSections()
 
 	if cfg.GlamourStyle == styles.AutoStyle {
@@ -154,6 +151,7 @@ func newModelWithTerminal(cfg Config, content string, term Terminal) tea.Model {
 	common := commonModel{
 		cfg:      cfg,
 		terminal: term,
+		renderer: renderer,
 	}
 
 	m := model{
