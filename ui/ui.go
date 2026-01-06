@@ -13,7 +13,6 @@ import (
 	"github.com/charmbracelet/glow/v2/utils"
 	"github.com/charmbracelet/log"
 	"github.com/muesli/gitcha"
-	te "github.com/muesli/termenv"
 )
 
 const (
@@ -29,8 +28,14 @@ var (
 	}
 )
 
-// NewProgram returns a new Tea program.
+// NewProgram returns a new Tea program using the real terminal.
 func NewProgram(cfg Config, content string) *tea.Program {
+	return NewProgramWithTerminal(cfg, content, RealTerminal{})
+}
+
+// NewProgramWithTerminal returns a new Tea program with an injected Terminal.
+// This is the composition root for dependency injection.
+func NewProgramWithTerminal(cfg Config, content string, term Terminal) *tea.Program {
 	log.Debug(
 		"Starting glow",
 		"high_perf_pager",
@@ -44,7 +49,7 @@ func NewProgram(cfg Config, content string) *tea.Program {
 	if cfg.EnableMouse {
 		opts = append(opts, tea.WithMouseCellMotion())
 	}
-	m := newModel(cfg, content)
+	m := newModelWithTerminal(cfg, content, term)
 	return tea.NewProgram(m, opts...)
 }
 
@@ -91,10 +96,11 @@ func (s state) String() string {
 
 // Common stuff we'll need to access in all models.
 type commonModel struct {
-	cfg    Config
-	cwd    string
-	width  int
-	height int
+	cfg      Config
+	terminal Terminal
+	cwd      string
+	width    int
+	height   int
 }
 
 type model struct {
@@ -131,10 +137,14 @@ func (m *model) unloadDocument() []tea.Cmd {
 }
 
 func newModel(cfg Config, content string) tea.Model {
+	return newModelWithTerminal(cfg, content, RealTerminal{})
+}
+
+func newModelWithTerminal(cfg Config, content string, term Terminal) tea.Model {
 	initSections()
 
 	if cfg.GlamourStyle == styles.AutoStyle {
-		if te.HasDarkBackground() {
+		if term.HasDarkBackground() {
 			cfg.GlamourStyle = styles.DarkStyle
 		} else {
 			cfg.GlamourStyle = styles.LightStyle
@@ -142,7 +152,8 @@ func newModel(cfg Config, content string) tea.Model {
 	}
 
 	common := commonModel{
-		cfg: cfg,
+		cfg:      cfg,
+		terminal: term,
 	}
 
 	m := model{

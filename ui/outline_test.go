@@ -226,9 +226,10 @@ func TestOutlineModelUpdateCurrent(t *testing.T) {
 func TestPagerOutlineIntegration(t *testing.T) {
 	// Test that outline works correctly when toggled
 	common := &commonModel{
-		cfg:    Config{ShowOutline: false},
-		width:  120,
-		height: 40,
+		cfg:      Config{ShowOutline: false},
+		terminal: NewTestTerminal(),
+		width:    120,
+		height:   40,
 	}
 
 	m := newPagerModel(common)
@@ -271,9 +272,10 @@ func TestPagerOutlineIntegration(t *testing.T) {
 
 func TestPagerIsMarkdownFile(t *testing.T) {
 	common := &commonModel{
-		cfg:    Config{},
-		width:  120,
-		height: 40,
+		cfg:      Config{},
+		terminal: NewTestTerminal(),
+		width:    120,
+		height:   40,
 	}
 
 	tests := []struct {
@@ -336,9 +338,10 @@ func TestOutlineViewRendering(t *testing.T) {
 
 func TestPagerViewWithOutline(t *testing.T) {
 	common := &commonModel{
-		cfg:    Config{ShowOutline: true},
-		width:  100,
-		height: 25,
+		cfg:      Config{ShowOutline: true},
+		terminal: NewTestTerminal(),
+		width:    100,
+		height:   25,
 	}
 
 	m := newPagerModel(common)
@@ -379,9 +382,10 @@ func TestPagerViewWithOutline(t *testing.T) {
 
 func TestPagerViewWithANSIContent(t *testing.T) {
 	common := &commonModel{
-		cfg:    Config{ShowOutline: true},
-		width:  100,
-		height: 25,
+		cfg:      Config{ShowOutline: true},
+		terminal: NewTestTerminal(),
+		width:    100,
+		height:   25,
 	}
 
 	m := newPagerModel(common)
@@ -426,9 +430,10 @@ func TestPagerViewWithHighPerfRendering(t *testing.T) {
 	}
 
 	common := &commonModel{
-		cfg:    config,
-		width:  100,
-		height: 25,
+		cfg:      config,
+		terminal: NewTestTerminal(),
+		width:    100,
+		height:   25,
 	}
 
 	m := newPagerModel(common)

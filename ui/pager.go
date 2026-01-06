@@ -7,7 +7,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/atotto/clipboard"
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/glamour"
@@ -19,7 +18,6 @@ import (
 	runewidth "github.com/mattn/go-runewidth"
 	"github.com/muesli/reflow/ansi"
 	"github.com/muesli/reflow/truncate"
-	"github.com/muesli/termenv"
 )
 
 const (
@@ -267,9 +265,9 @@ func (m pagerModel) update(msg tea.Msg) (pagerModel, tea.Cmd) {
 
 		case "c":
 			// Copy using OSC 52
-			termenv.Copy(m.currentDocument.Body)
+			m.common.terminal.CopyOSC52(m.currentDocument.Body)
 			// Copy using native system clipboard
-			_ = clipboard.WriteAll(m.currentDocument.Body)
+			_ = m.common.terminal.CopyClipboard(m.currentDocument.Body)
 			cmds = append(cmds, m.showStatusMessage(pagerStatusMessage{"Copied contents", false}))
 
 		case "r":
