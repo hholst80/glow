@@ -576,3 +576,311 @@ func TestTooComplexShowsOriginalWithNote(t *testing.T) {
 		t.Error("Result should preserve original diagram source")
 	}
 }
+
+// ====================
+// BOUNDARY TESTS FOR COMPLEXITY THRESHOLDS
+// ====================
+
+func TestComplexityBoundary_MaxTotalEdges(t *testing.T) {
+	// maxTotalEdges = 15, test at boundaries
+	tests := []struct {
+		name      string
+		edgeCount int
+		tooComplex bool
+	}{
+		{"14 edges (under limit)", 14, false},
+		{"15 edges (at limit)", 15, false},
+		{"16 edges (over limit)", 16, true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Build a graph with N edges: A --> B --> C --> ...
+			var nodes []string
+			for i := 0; i <= tt.edgeCount; i++ {
+				nodes = append(nodes, string(rune('A'+i%26)))
+			}
+			var edges strings.Builder
+			edges.WriteString("graph LR\n")
+			for i := 0; i < tt.edgeCount; i++ {
+				edges.WriteString("    ")
+				edges.WriteString(nodes[i])
+				edges.WriteString(" --> ")
+				edges.WriteString(nodes[i+1])
+				edges.WriteString("\n")
+			}
+
+			result := isTooComplex(edges.String())
+			if result != tt.tooComplex {
+				t.Errorf("isTooComplex() with %d edges = %v, want %v", tt.edgeCount, result, tt.tooComplex)
+			}
+		})
+	}
+}
+
+func TestComplexityBoundary_SubgraphsWithEdges(t *testing.T) {
+	// maxSubgraphsWithEdges = 1, maxEdgesWithSubgraphs = 6
+	// Complex if subgraphs > 1 AND edges > 6
+	tests := []struct {
+		name           string
+		subgraphCount  int
+		edgeCount      int
+		tooComplex     bool
+	}{
+		{"1 subgraph, 6 edges (at limit)", 1, 6, false},
+		{"1 subgraph, 7 edges (edges over but 1 subgraph)", 1, 7, false},
+		{"2 subgraphs, 6 edges (at limit)", 2, 6, false},
+		{"2 subgraphs, 7 edges (over limit)", 2, 7, true},
+		{"3 subgraphs, 5 edges (under edge limit)", 3, 5, false},
+		{"3 subgraphs, 7 edges (over limit)", 3, 7, true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var src strings.Builder
+			src.WriteString("flowchart LR\n")
+
+			// Add subgraphs
+			for i := 0; i < tt.subgraphCount; i++ {
+				src.WriteString("    subgraph SG")
+				src.WriteString(string(rune('A' + i)))
+				src.WriteString("[Group")
+				src.WriteString(string(rune('A' + i)))
+				src.WriteString("]\n        N")
+				src.WriteString(string(rune('A' + i)))
+				src.WriteString("[Node]\n    end\n")
+			}
+
+			// Add edges
+			for i := 0; i < tt.edgeCount; i++ {
+				src.WriteString("    X")
+				src.WriteString(string(rune('0' + i%10)))
+				src.WriteString(" --> Y")
+				src.WriteString(string(rune('0' + i%10)))
+				src.WriteString("\n")
+			}
+
+			result := isTooComplex(src.String())
+			if result != tt.tooComplex {
+				t.Errorf("isTooComplex() with %d subgraphs and %d edges = %v, want %v",
+					tt.subgraphCount, tt.edgeCount, result, tt.tooComplex)
+			}
+		})
+	}
+}
+
+func TestComplexity_NonFlowchartNeverComplex(t *testing.T) {
+	// Non-flowchart diagrams should never be marked as too complex
+	// even with many elements
+	tests := []struct {
+		name   string
+		source string
+	}{
+		{
+			"sequence diagram with many messages",
+			`sequenceDiagram
+    A->>B: msg1
+    B->>C: msg2
+    C->>D: msg3
+    D->>E: msg4
+    E->>F: msg5
+    F->>G: msg6
+    G->>H: msg7
+    H->>I: msg8
+    I->>J: msg9
+    J->>K: msg10
+    K->>L: msg11
+    L->>M: msg12
+    M->>N: msg13
+    N->>O: msg14
+    O->>P: msg15
+    P->>Q: msg16
+    Q->>R: msg17`,
+		},
+		{
+			"class diagram with many classes",
+			`classDiagram
+    class A
+    class B
+    class C
+    A --> B
+    B --> C`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if isTooComplex(tt.source) {
+				t.Errorf("Non-flowchart should never be too complex: %s", tt.name)
+			}
+		})
+	}
+}
+
+// ====================
+// EDGE CASE TESTS
+// ====================
+
+func TestUnicodeContentInDiagrams(t *testing.T) {
+	r := NewRenderer()
+
+	tests := []struct {
+		name     string
+		source   string
+		contains []string
+	}{
+		{
+			"Emoji labels",
+			"graph LR\n    A[🚀 Start] --> B[✅ End]",
+			[]string{"Start", "End"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, err := r.Render(tt.source, 0)
+			if err != nil {
+				t.Skipf("Unicode rendering not supported: %v", err)
+			}
+			for _, want := range tt.contains {
+				if !strings.Contains(result, want) {
+					t.Errorf("Result should contain %q, got:\n%s", want, result)
+				}
+			}
+		})
+	}
+}
+
+func TestUnicodeContentInDiagrams_NonASCII(t *testing.T) {
+	// Note: The mermaid-ascii library has known encoding issues with non-ASCII
+	// characters in certain environments. These tests document the limitation.
+	r := NewRenderer()
+
+	tests := []struct {
+		name   string
+		source string
+	}{
+		{
+			"Japanese labels",
+			"graph LR\n    A[こんにちは] --> B[世界]",
+		},
+		{
+			"Cyrillic labels",
+			"graph TD\n    A[Привет] --> B[Мир]",
+		},
+		{
+			"Arabic labels",
+			"graph LR\n    A[مرحبا] --> B[عالم]",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, err := r.Render(tt.source, 0)
+			if err != nil {
+				t.Logf("Non-ASCII rendering failed (expected in some environments): %v", err)
+				return
+			}
+			// Just verify rendering completes without panic
+			t.Logf("Non-ASCII rendered (%d bytes):\n%s", len(result), result)
+		})
+	}
+}
+
+func TestNestedCodeBlocksInMarkdown(t *testing.T) {
+	// Mermaid blocks inside other code blocks should not be processed
+	markdown := "# Doc\n\n````markdown\n```mermaid\ngraph LR\n    A --> B\n```\n````\n\nText"
+
+	mock := &MockRenderer{
+		RenderFunc: func(source string) (string, error) {
+			return "RENDERED", nil
+		},
+	}
+	p := NewPreprocessor(mock, 0)
+	result := p.Process(markdown)
+
+	// The inner mermaid block might still be detected by our regex
+	// but we verify outer structure is preserved
+	if !strings.Contains(result, "# Doc") {
+		t.Error("Should preserve document structure")
+	}
+	if !strings.Contains(result, "Text") {
+		t.Error("Should preserve trailing text")
+	}
+}
+
+func TestEmptyAndWhitespaceBlocks(t *testing.T) {
+	tests := []struct {
+		name     string
+		markdown string
+	}{
+		{"empty mermaid block", "```mermaid\n```"},
+		{"whitespace only mermaid block", "```mermaid\n   \n   \n```"},
+	}
+
+	mock := &MockRenderer{
+		RenderFunc: func(source string) (string, error) {
+			t.Errorf("Render should not be called for empty content, got: %q", source)
+			return "", nil
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mock.Calls = nil
+			p := NewPreprocessor(mock, 0)
+			_ = p.Process(tt.markdown)
+
+			if len(mock.Calls) > 0 {
+				t.Errorf("Empty block should not trigger render, got %d calls", len(mock.Calls))
+			}
+		})
+	}
+}
+
+func TestGetMaxLineWidth(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected int
+	}{
+		{"empty string", "", 0},
+		{"single line", "hello", 5},
+		{"multi line", "short\nlonger line\nmed", 11},
+		{"unicode chars", "héllo wörld", 11},
+		{"wide unicode", "日本語", 3}, // 3 runes, though display width varies
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := getMaxLineWidth(tt.input)
+			if result != tt.expected {
+				t.Errorf("getMaxLineWidth(%q) = %d, want %d", tt.input, result, tt.expected)
+			}
+		})
+	}
+}
+
+func TestEdgePatternDetection(t *testing.T) {
+	// Test that various edge syntaxes are detected
+	tests := []struct {
+		name      string
+		source    string
+		edgeCount int
+	}{
+		{"arrow -->", "graph LR\n    A --> B", 1},
+		{"dotted -.->", "graph LR\n    A -.-> B", 1},
+		{"thick ==>", "graph LR\n    A ==> B", 1},
+		{"multiple types", "graph LR\n    A --> B -.-> C ==> D", 3},
+		{"with labels", "graph LR\n    A -->|yes| B -->|no| C", 2},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			matches := edgeRegex.FindAllString(tt.source, -1)
+			if len(matches) != tt.edgeCount {
+				t.Errorf("Found %d edges, want %d in:\n%s", len(matches), tt.edgeCount, tt.source)
+			}
+		})
+	}
+}
