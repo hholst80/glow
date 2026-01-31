@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/charmbracelet/glow/v2/mermaid/ascii/diagram"
-	"github.com/charmbracelet/glow/v2/mermaid/ascii/sequence"
+	"github.com/hholst80/glow/mermaid/ascii/diagram"
+	"github.com/hholst80/glow/mermaid/ascii/sequence"
 )
 
 func DiagramFactory(input string) (diagram.Diagram, error) {

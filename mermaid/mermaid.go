@@ -13,7 +13,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/charmbracelet/glow/v2/mermaid/ascii"
+	"github.com/hholst80/glow/mermaid/ascii"
 )
 
 // ErrTooComplex is returned when a diagram is too complex for ASCII rendering.

@@ -6,8 +6,8 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/glamour"
-	"github.com/charmbracelet/glow/v2/mermaid"
-	"github.com/charmbracelet/glow/v2/utils"
+	"github.com/hholst80/glow/mermaid"
+	"github.com/hholst80/glow/utils"
 )
 
 // MarkdownRenderer abstracts markdown-to-terminal rendering for testability.

@@ -3,7 +3,7 @@ package ascii
 import (
 	"fmt"
 
-	"github.com/charmbracelet/glow/v2/mermaid/ascii/diagram"
+	"github.com/hholst80/glow/mermaid/ascii/diagram"
 )
 
 func RenderDiagram(input string, config *diagram.Config) (string, error) {
