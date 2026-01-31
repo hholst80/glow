@@ -313,6 +313,11 @@ func mermaidFileToMap(mermaid, styleType string) (*graphProperties, error) {
 		// Check for subgraph start
 		if match := subgraphRegex.FindStringSubmatch(trimmedLine); match != nil {
 			subgraphName := strings.TrimSpace(match[1])
+			// Parse subgraph name to extract display label if present
+			// e.g., "svc[Services]" -> "Services", "Services" -> "Services"
+			if labelMatch := nodeWithLabelRegex.FindStringSubmatch(subgraphName); labelMatch != nil {
+				subgraphName = extractLabelText(labelMatch[2])
+			}
 			newSubgraph := &textSubgraph{
 				name:     subgraphName,
 				nodes:    []string{},
