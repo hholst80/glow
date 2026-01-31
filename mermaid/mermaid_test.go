@@ -352,6 +352,45 @@ func TestFlowchartWithLabels(t *testing.T) {
 	}
 }
 
+// TestNodeLabelDeduplication verifies that nodes with labels (e.g., A[Label])
+// are correctly matched with bare references (e.g., A) without duplication.
+// This is a regression test for the node ID extraction fix.
+func TestNodeLabelDeduplication(t *testing.T) {
+	r := NewRenderer()
+
+	// This pattern caused node duplication before the fix:
+	// - First line defines control[mx-control]
+	// - Second line references just "control"
+	// The library should recognize these as the same node.
+	source := `flowchart LR
+    control[mx-control] --> tenants[(tenants)]
+    control --> domains[(domains)]
+    agent[mx-agent] --> tenants
+    agent --> domains`
+
+	result, err := r.Render(source, 0)
+	if err != nil {
+		t.Fatalf("Rendering failed: %v", err)
+	}
+
+	// Each node should appear exactly once in the output
+	nodeLabels := []string{"mx-control", "mx-agent", "tenants", "domains"}
+	for _, label := range nodeLabels {
+		count := strings.Count(result, label)
+		if count != 1 {
+			t.Errorf("Node label %q appears %d times, expected 1.\nOutput:\n%s", label, count, result)
+		}
+	}
+
+	// Verify labels are displayed (not just IDs)
+	if strings.Contains(result, "│ control │") && !strings.Contains(result, "mx-control") {
+		t.Error("Node should display label 'mx-control', not bare ID 'control'")
+	}
+	if strings.Contains(result, "│ agent │") && !strings.Contains(result, "mx-agent") {
+		t.Error("Node should display label 'mx-agent', not bare ID 'agent'")
+	}
+}
+
 func TestProcessMarkdownIntegration(t *testing.T) {
 	markdown := `# My Document
 
@@ -413,7 +452,7 @@ func TestIsTooComplex(t *testing.T) {
 			expected: false,
 		},
 		{
-			name: "multiple subgraphs with many edges",
+			name: "multiple subgraphs with moderate edges (under new limits)",
 			source: `flowchart LR
     subgraph SENSE[Sense]
         cam[Camera]
@@ -430,14 +469,39 @@ func TestIsTooComplex(t *testing.T) {
     perc --> backend
     backend --> cam
     perc --> unity`,
-			expected: true,
+			expected: false, // 2 subgraphs, 7 edges - under new limits (>2 subgraphs AND >10 edges)
+		},
+		{
+			name: "many subgraphs with many edges (over limit)",
+			source: `flowchart LR
+    subgraph A[GroupA]
+        a1
+    end
+    subgraph B[GroupB]
+        b1
+    end
+    subgraph C[GroupC]
+        c1
+    end
+    a1 --> b1
+    b1 --> c1
+    c1 --> a1
+    a1 --> c1
+    b1 --> a1
+    c1 --> b1
+    a1 --> b1
+    b1 --> c1
+    c1 --> a1
+    a1 --> c1
+    b1 --> a1`,
+			expected: true, // 3 subgraphs, 11 edges - over limit (>2 AND >10)
 		},
 		{
 			name: "too many edges overall",
 			source: `graph LR
-    A --> B --> C --> D --> E --> F --> G --> H
-    H --> I --> J --> K --> L --> M --> N --> O --> P --> Q`,
-			expected: true,
+    A --> B --> C --> D --> E --> F --> G --> H --> I --> J --> K
+    K --> L --> M --> N --> O --> P --> Q --> R --> S --> T --> U --> V`,
+			expected: true, // 21 edges - over limit of 20
 		},
 	}
 
@@ -582,15 +646,15 @@ func TestTooComplexShowsOriginalWithNote(t *testing.T) {
 // ====================
 
 func TestComplexityBoundary_MaxTotalEdges(t *testing.T) {
-	// maxTotalEdges = 15, test at boundaries
+	// maxTotalEdges = 20, test at boundaries
 	tests := []struct {
 		name      string
 		edgeCount int
 		tooComplex bool
 	}{
-		{"14 edges (under limit)", 14, false},
-		{"15 edges (at limit)", 15, false},
-		{"16 edges (over limit)", 16, true},
+		{"19 edges (under limit)", 19, false},
+		{"20 edges (at limit)", 20, false},
+		{"21 edges (over limit)", 21, true},
 	}
 
 	for _, tt := range tests {
@@ -619,20 +683,20 @@ func TestComplexityBoundary_MaxTotalEdges(t *testing.T) {
 }
 
 func TestComplexityBoundary_SubgraphsWithEdges(t *testing.T) {
-	// maxSubgraphsWithEdges = 1, maxEdgesWithSubgraphs = 6
-	// Complex if subgraphs > 1 AND edges > 6
+	// maxSubgraphsWithEdges = 2, maxEdgesWithSubgraphs = 10
+	// Complex if subgraphs > 2 AND edges > 10
 	tests := []struct {
 		name           string
 		subgraphCount  int
 		edgeCount      int
 		tooComplex     bool
 	}{
-		{"1 subgraph, 6 edges (at limit)", 1, 6, false},
-		{"1 subgraph, 7 edges (edges over but 1 subgraph)", 1, 7, false},
-		{"2 subgraphs, 6 edges (at limit)", 2, 6, false},
-		{"2 subgraphs, 7 edges (over limit)", 2, 7, true},
-		{"3 subgraphs, 5 edges (under edge limit)", 3, 5, false},
-		{"3 subgraphs, 7 edges (over limit)", 3, 7, true},
+		{"1 subgraph, 10 edges (at limit)", 1, 10, false},
+		{"1 subgraph, 11 edges (edges over but 1 subgraph)", 1, 11, false},
+		{"2 subgraphs, 10 edges (at limit)", 2, 10, false},
+		{"2 subgraphs, 11 edges (edges over but 2 subgraphs)", 2, 11, false},
+		{"3 subgraphs, 10 edges (at edge limit)", 3, 10, false},
+		{"3 subgraphs, 11 edges (over limit)", 3, 11, true},
 	}
 
 	for _, tt := range tests {

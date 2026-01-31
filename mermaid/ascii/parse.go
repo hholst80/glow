@@ -23,8 +23,9 @@ type graphProperties struct {
 }
 
 type textNode struct {
-	name       string
-	styleClass string
+	name        string // Node ID used for matching/lookup
+	displayName string // Display text shown in rendered output (empty = use name)
+	styleClass  string
 }
 
 type textEdge struct {
@@ -40,17 +41,57 @@ type textSubgraph struct {
 	children []*textSubgraph
 }
 
+// nodeWithLabelRegex matches node definitions with labels like:
+// A[Label], A[(db)], A([stadium]), A{decision}, A{{hexagon}}, A>asymmetric], A((circle))
+// Captures: group 1 = node ID, group 2 = label content (including brackets for shape info)
+var nodeWithLabelRegex = regexp.MustCompile(`^([a-zA-Z_][a-zA-Z0-9_]*)(\[.*\]|\(.*\)|\{.*\}|>.*\])$`)
+
+// extractLabelText extracts the text content from a Mermaid label, removing shape brackets.
+// Examples: "[Label]" -> "Label", "[(db)]" -> "db", "([stadium])" -> "stadium"
+func extractLabelText(label string) string {
+	if len(label) < 2 {
+		return label
+	}
+	// Remove outer brackets based on shape type
+	inner := label
+	// Handle double brackets: [( )], (( )), {{ }}, etc.
+	for len(inner) >= 2 && (inner[0] == '[' || inner[0] == '(' || inner[0] == '{' || inner[0] == '>') {
+		last := inner[len(inner)-1]
+		if (inner[0] == '[' && last == ']') ||
+			(inner[0] == '(' && last == ')') ||
+			(inner[0] == '{' && last == '}') ||
+			(inner[0] == '>' && last == ']') {
+			inner = inner[1 : len(inner)-1]
+		} else {
+			break
+		}
+	}
+	return strings.TrimSpace(inner)
+}
+
 func parseNode(line string) textNode {
 	// Trim any whitespace from the line that might be left after comment removal
 	trimmedLine := strings.TrimSpace(line)
 
+	// First check for style class suffix (e.g., A:::className)
 	nodeWithClass, _ := regexp.Compile(`^(.+):::(.+)$`)
-
 	if match := nodeWithClass.FindStringSubmatch(trimmedLine); match != nil {
-		return textNode{strings.TrimSpace(match[1]), strings.TrimSpace(match[2])}
-	} else {
-		return textNode{trimmedLine, ""}
+		// Recursively parse the node part to extract ID from label
+		node := parseNode(match[1])
+		node.styleClass = strings.TrimSpace(match[2])
+		return node
 	}
+
+	// Check for node with label (e.g., A[Label], A[(db)])
+	// Extract node ID for matching, and label text for display
+	if match := nodeWithLabelRegex.FindStringSubmatch(trimmedLine); match != nil {
+		nodeID := strings.TrimSpace(match[1])
+		labelText := extractLabelText(match[2])
+		return textNode{name: nodeID, displayName: labelText, styleClass: ""}
+	}
+
+	// Plain node without label - use name for both ID and display
+	return textNode{name: trimmedLine, displayName: "", styleClass: ""}
 }
 
 func parseStyleClass(matchedLine []string) styleClass {

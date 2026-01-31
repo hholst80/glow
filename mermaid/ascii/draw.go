@@ -227,11 +227,12 @@ func drawBox(n *node, g graph) *drawing {
 		boxDrawing[from.x][to.y] = "+"   // Bottom left corner
 		boxDrawing[to.x][to.y] = "+"     // Bottom right corner
 	}
-	// Draw text
+	// Draw text - use displayName if set, otherwise use name
+	displayText := n.getDisplayName()
 	textY := from.y + h/2
-	textX := from.x + w/2 - CeilDiv(len(n.name), 2) + 1
-	for x := 0; x < len(n.name); x++ {
-		boxDrawing[textX+x][textY] = wrapTextInColor(string(n.name[x]), n.styleClass.styles["color"], g.styleType)
+	textX := from.x + w/2 - CeilDiv(len(displayText), 2) + 1
+	for x := 0; x < len(displayText); x++ {
+		boxDrawing[textX+x][textY] = wrapTextInColor(string(displayText[x]), n.styleClass.styles["color"], g.styleType)
 	}
 
 	return &boxDrawing

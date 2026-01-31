@@ -71,17 +71,28 @@ func mkGraph(data *orderedmap.OrderedMap[string, []textEdge]) graph {
 		// Get or create parent node
 		parentNode, err := g.getNode(nodeName)
 		if err != nil {
-			parentNode = &node{name: nodeName, index: index, styleClassName: ""}
+			// Try to get displayName from the first edge where this node is parent
+			displayName := ""
+			if len(children) > 0 && children[0].parent.displayName != "" {
+				displayName = children[0].parent.displayName
+			}
+			parentNode = &node{name: nodeName, displayName: displayName, index: index, styleClassName: ""}
 			g.appendNode(parentNode)
 			index += 1
+		} else if parentNode.displayName == "" && len(children) > 0 && children[0].parent.displayName != "" {
+			// Update displayName if we found a better one
+			parentNode.displayName = children[0].parent.displayName
 		}
 		for _, textEdge := range children {
 			childNode, err := g.getNode(textEdge.child.name)
 			if err != nil {
-				childNode = &node{name: textEdge.child.name, index: index, styleClassName: textEdge.child.styleClass}
+				childNode = &node{name: textEdge.child.name, displayName: textEdge.child.displayName, index: index, styleClassName: textEdge.child.styleClass}
 				parentNode.styleClassName = textEdge.parent.styleClass
 				g.appendNode(childNode)
 				index += 1
+			} else if childNode.displayName == "" && textEdge.child.displayName != "" {
+				// Update displayName if we found a better one
+				childNode.displayName = textEdge.child.displayName
 			}
 			e := edge{from: parentNode, to: childNode, text: textEdge.label}
 			g.edges = append(g.edges, &e)

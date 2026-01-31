@@ -70,12 +70,12 @@ func getMaxLineWidth(text string) int {
 }
 
 // Complexity thresholds for flowcharts with subgraphs.
-// The mermaid-ascii library has layout issues with subgraphs that have
-// external connections, causing node duplication and garbled output.
+// The mermaid-ascii library can handle moderate complexity if node names
+// are used consistently (avoid mixing A[Label] with plain A references).
 const (
-	maxSubgraphsWithEdges = 1  // Max subgraphs when diagram has cross-subgraph edges
-	maxEdgesWithSubgraphs = 6  // Max edges when subgraphs are present
-	maxTotalEdges         = 15 // Max edges for any flowchart
+	maxSubgraphsWithEdges = 2  // Max subgraphs when diagram has cross-subgraph edges
+	maxEdgesWithSubgraphs = 10 // Max edges when subgraphs are present
+	maxTotalEdges         = 20 // Max edges for any flowchart
 )
 
 // Regex patterns for complexity detection
