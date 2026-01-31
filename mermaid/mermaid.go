@@ -13,7 +13,7 @@ import (
 	"regexp"
 	"strings"
 
-	mermaidcmd "github.com/AlexanderGrooff/mermaid-ascii/cmd"
+	"github.com/charmbracelet/glow/v2/mermaid/ascii"
 )
 
 // ErrTooComplex is returned when a diagram is too complex for ASCII rendering.
@@ -43,7 +43,7 @@ func (r *DefaultRenderer) Render(source string, maxWidth int) (string, error) {
 		return "", ErrTooComplex
 	}
 	// Pass nil config to use defaults (Unicode box-drawing characters)
-	result, err := mermaidcmd.RenderDiagram(source, nil)
+	result, err := ascii.RenderDiagram(source, nil)
 	if err != nil {
 		return "", err
 	}
